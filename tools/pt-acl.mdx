@@ -1,10 +1,10 @@
 ---
-title: "pt_apply_acl and pt_remove_acl: ACL Management"
+title: "ACL Management: Apply and Remove ACLs in Packet Tracer"
 sidebarTitle: "pt_acl"
-description: "Reference for pt_apply_acl and pt_remove_acl — apply standard, extended, and named ACLs to live Cisco Packet Tracer routers via the HTTP bridge."
+description: "Reference for all four ACL tools — apply or remove standard and extended ACLs on live Packet Tracer routers via CLI or the Object API backend."
 ---
 
-Access Control List tools let you define and bind traffic filters directly on routers that are already running in a live Packet Tracer topology. Three ACL types are supported: **standard** ACLs (filter by source IP only, numbers 1–99 and 1300–1999), **extended** ACLs (filter by source, destination, protocol, and ports, numbers 100–199 and 2000–2699), and **named** ACLs (any alphanumeric string, same expressive power as extended). ACLs are applied post-deploy via `configureIosDevice` over the HTTP bridge, or alternatively through the `AclProcess` object API (`pt_apply_acl_object`). Both tools run the same static validation pipeline before sending anything to Packet Tracer.
+Access Control List tools let you define and bind traffic filters directly on routers that are already running in a live Packet Tracer topology. Two ACL numbering styles are supported: **numeric** ACLs (standard 1–99 / 1300–1999, extended 100–199 / 2000–2699) and **named** ACLs (any alphanumeric string used as `name_or_number` with `acl_type="standard"` or `"extended"`). Each style comes in two backend variants — a CLI backend that uses `configureIosDevice`, and an Object API backend that uses PT's `AclProcess` JS API directly. All four tools run the same static validation pipeline before sending anything to Packet Tracer.
 
 ---
 
@@ -24,11 +24,11 @@ Applies an ACL to a router in the active topology. The full pipeline is: build `
   - `"100"` – `"199"` → extended ACL
   - `"1300"` – `"1999"` → expanded standard range
   - `"2000"` – `"2699"` → expanded extended range
-  - Any alphanumeric string (e.g. `"BLOCK_HTTP"`) → named ACL
+  - Any alphanumeric string (e.g. `"BLOCK_HTTP"`) → named ACL (set `acl_type` to `"standard"` or `"extended"` as appropriate)
 </ParamField>
 
 <ParamField body="acl_type" type="string" required>
-  `"standard"` or `"extended"`. Must be consistent with `name_or_number` when a numeric identifier is used — mismatches are caught by the validator and returned as errors before anything is sent to PT.
+  `"standard"` or `"extended"`. Must be consistent with `name_or_number` when a numeric identifier is used — mismatches are caught by the validator and returned as errors before anything is sent to PT. Named ACLs also require this field to declare whether the ACL filters by source only (`"standard"`) or by full src/dst/protocol (`"extended"`).
 </ParamField>
 
 <ParamField body="entries" type="array" required>
@@ -124,17 +124,53 @@ The dynamic validator (`validate_against_topology`) additionally confirms that `
 
 ## pt\_apply\_acl\_object
 
-An alternative backend that uses Packet Tracer's `AclProcess.addAcl` / `addStatement` object API instead of `configureIosDevice` CLI. The input parameters are identical to `pt_apply_acl`.
+An alternative backend that uses Packet Tracer's `AclProcess.addAcl` / `addStatement` object API instead of `configureIosDevice` CLI. The core input parameters are identical to `pt_apply_acl`, with one additional parameter.
 
 This variant is faster (no IOS CLI parsing in PT) and less likely to trigger modal error popups if a statement has a minor issue. The tradeoff is that interface binding uses `port.setAclInID` / `setAclOutID`, which only works on base physical interfaces — not on sub-interfaces such as `GigabitEthernet0/0.20`. For sub-interface bindings, use `pt_apply_acl` (CLI backend).
 
-The additional parameter `replace_existing` (boolean, default `true`) causes the tool to call `ap.removeAcl(name)` before re-creating the ACL, ensuring a clean slate on repeated calls.
+### Parameters
+
+<ParamField body="router" type="string" required>
+  The exact name of the router device in Packet Tracer.
+</ParamField>
+
+<ParamField body="name_or_number" type="string" required>
+  ACL identifier — same format as `pt_apply_acl` (numeric or alphanumeric string).
+</ParamField>
+
+<ParamField body="acl_type" type="string" required>
+  `"standard"` or `"extended"`.
+</ParamField>
+
+<ParamField body="entries" type="array" required>
+  List of ACL rule objects — same format as `pt_apply_acl`.
+</ParamField>
+
+<ParamField body="binding_interface" type="string" optional>
+  Base physical interface to bind the ACL to. Sub-interfaces (e.g. `GigabitEthernet0/0.20`) are not supported by the Object API — use `pt_apply_acl` for those.
+</ParamField>
+
+<ParamField body="binding_direction" type="string" default="in">
+  `"in"` or `"out"`. Only used when `binding_interface` is set.
+</ParamField>
+
+<ParamField body="replace_existing" type="boolean" default="true">
+  When `true`, calls `ap.removeAcl(name)` before re-creating the ACL, ensuring a clean slate on repeated calls. Set to `false` to append to an existing ACL without removing it first.
+</ParamField>
+
+<ParamField body="dry_run" type="boolean" default="false">
+  When `true`, validates and returns the JS payload without sending to PT.
+</ParamField>
+
+### Return value
+
+Returns the same JSON shape as `pt_apply_acl`, with an additional `"backend": "objects"` field in the response.
 
 ---
 
 ## pt\_remove\_acl
 
-Removes an ACL from a router, optionally clearing its interface binding first.
+Removes an ACL from a router using the CLI backend (`configureIosDevice`), optionally clearing its interface binding first.
 
 ### Parameters
 
@@ -184,19 +220,57 @@ Without `binding_interface`, only `no access-list 101` (or `no ip access-list ex
 }
 ```
 
+---
+
 ## pt\_remove\_acl\_object
 
-Counterpart to `pt_apply_acl_object`. Uses `AclProcess.removeAcl` and `port.setAclInID("")` / `port.setAclOutID("")` for removal. Parameters are identical to `pt_remove_acl`. Use this variant when the ACL was originally applied with `pt_apply_acl_object`.
+Counterpart to `pt_apply_acl_object`. Uses `AclProcess.removeAcl` and `port.setAclInID("")` / `port.setAclOutID("")` for removal. Use this variant when the ACL was originally applied with `pt_apply_acl_object`.
+
+### Parameters
+
+<ParamField body="router" type="string" required>
+  Exact router name in PT.
+</ParamField>
+
+<ParamField body="name_or_number" type="string" required>
+  Identifier of the ACL to remove.
+</ParamField>
+
+<ParamField body="binding_interface" type="string" optional>
+  If the ACL was bound to an interface, specify it here so the Object API clears the binding before removing the ACL definition.
+</ParamField>
+
+<ParamField body="binding_direction" type="string" default="in">
+  `"in"` or `"out"`. Only used when `binding_interface` is set.
+</ParamField>
+
+<ParamField body="dry_run" type="boolean" default="false">
+  Returns the removal payload without sending it to PT.
+</ParamField>
+
+### Return value
+
+Returns the same JSON shape as `pt_remove_acl`, with an additional `"backend": "objects"` field.
 
 ---
 
-## When to Use Each ACL Type
+## When to Use Each Backend
 
-| Type | Number Range | Filters On | Typical Use |
-|---|---|---|---|
-| **standard** | 1–99, 1300–1999 | Source IP only | Restrict which hosts can reach a segment; simple permit/deny per subnet |
-| **extended** | 100–199, 2000–2699 | Src + dst + protocol + ports | Block specific services (HTTP, FTP, ICMP) between specific subnets |
-| **named** | any string | Src + dst + protocol + ports (same as extended) | Production configs — easier to read, edit, and document |
+| Scenario | Recommended Tool |
+|---|---|
+| Standard numbered or named ACL, any interface | `pt_apply_acl` |
+| Sub-interface binding (e.g. `GigabitEthernet0/0.20`) | `pt_apply_acl` (CLI only) |
+| Faster application, avoid CLI parser popups | `pt_apply_acl_object` |
+| Remove ACL applied via CLI backend | `pt_remove_acl` |
+| Remove ACL applied via Object API | `pt_remove_acl_object` |
+
+## Numeric ACL Ranges
+
+| `name_or_number` | `acl_type` | Filters On |
+|---|---|---|
+| `"1"` – `"99"` or `"1300"` – `"1999"` | `"standard"` | Source IP only |
+| `"100"` – `"199"` or `"2000"` – `"2699"` | `"extended"` | Src + dst + protocol + ports |
+| Any alphanumeric string (e.g. `"BLOCK_HTTP"`) | `"standard"` or `"extended"` | Depends on `acl_type` |
 
 <Warning>
   All ACL tools require the HTTP bridge to be active and Packet Tracer to be connected. Check status with `pt_bridge_status` before calling. If the bridge is up but PT is not connected, the tools run the full validation pipeline and return the CLI payload, but `sent` will be `false`.

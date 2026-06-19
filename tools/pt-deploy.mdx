@@ -1,7 +1,7 @@
 ---
-title: "pt_deploy: Copy-to-Clipboard Deployment"
-sidebarTitle: "pt_deploy"
-description: "pt_deploy copies the PTBuilder JavaScript script to the clipboard and provides instructions for manually pasting it into Packet Tracer's Builder Code Editor."
+title: "pt_deploy: Clipboard-Based Packet Tracer Deployment"
+sidebarTitle: "Deploy"
+description: "pt_deploy copies the PTBuilder JavaScript to the Windows clipboard and exports project files with paste instructions for Packet Tracer's Scripting panel."
 ---
 
 `pt_deploy` is the clipboard-based deployment path — an alternative to `pt_live_deploy` that works without an active HTTP bridge. It generates the full PTBuilder JavaScript script from a `TopologyPlan`, copies it to the Windows clipboard using `clip.exe`, exports all project files (script, CLI configs, plan JSON) to the `projects/` directory, and returns human-readable step-by-step paste instructions. This makes it the safest option when you want to review the script before running it, or when the live bridge is not configured.
@@ -50,10 +50,10 @@ When called, the executor runs these steps in sequence:
 
 ## How to paste the script into Packet Tracer
 
-After `pt_deploy` returns, follow these steps to build the topology:
+After `pt_deploy` returns, follow these steps to build the topology. The deployment script goes into **Extensions → Scripting** — not Builder Code Editor (Builder Code Editor is reserved for the one-time bridge bootstrap snippet used by `pt_live_deploy`).
 
 1. Open **Cisco Packet Tracer 8.2+**
-2. Go to **Extensions → Builder Code Editor** (or **Extensions → Scripting** depending on your PT version)
+2. Go to **Extensions → Scripting**
 3. Click inside the code editor pane to focus it
 4. Press **Ctrl+V** to paste the script from clipboard
 5. Click **Run** (or the play button) to execute
@@ -71,5 +71,5 @@ Packet Tracer will create all devices and cables automatically. You can then app
 | **Script review before run** | Yes | No — streams immediately |
 
 <Tip>
-  After running `pt_deploy`, the exported `full_build.js` file contains both the structural PTBuilder calls and the IOS CLI configs as `/* */` comments — useful as a complete single-file reference for the topology.
+  After running `pt_deploy`, the exported `full_build.js` file contains both the structural PTBuilder calls and the IOS CLI configs as `/* */` block comments — useful as a complete single-file reference for the topology.
 </Tip>

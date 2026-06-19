@@ -1,7 +1,7 @@
 ---
-title: "pt_add_module and pt_install_modules_batch Reference"
+title: "Expansion Modules: pt_add_module and Batch Install"
 sidebarTitle: "pt_modules"
-description: "Reference for pt_list_modules, pt_add_module, and pt_install_modules_batch — hot-install expansion modules on live Packet Tracer routers."
+description: "Reference for pt_list_modules, pt_add_module, and pt_install_modules_batch — install serial, Ethernet, and wireless modules on Packet Tracer routers."
 ---
 
 Expansion module tools let you add serial, Ethernet, or wireless interfaces to routers that are already present in a live Packet Tracer topology — without tearing down and rebuilding the canvas. Packet Tracer requires a physical power cycle whenever a module is installed, so the bridge runtime patch handles it automatically: the device is powered off, the module is slotted in, and the device powers back on with `skipBoot`. Three tools cover module discovery and installation: `pt_list_modules` queries the built-in catalog, `pt_add_module` installs a single module with its own power cycle, and `pt_install_modules_batch` installs multiple modules across one or more routers in a single power cycle pass.
@@ -75,7 +75,7 @@ Installs a single expansion module into a named slot on a device that already ex
 </ParamField>
 
 <ParamField body="dry_run" type="boolean" default="false">
-  When `true`, validates the request and returns the JavaScript payload without sending it to PT. Useful for inspecting what will be sent.
+  When `true`, validates the request and returns the JavaScript payload without sending it to PT. The bridge does not need to be connected for a dry run.
 </ParamField>
 
 ### Validation
@@ -84,8 +84,8 @@ Before the JS payload is sent, `pt_add_module` performs the following checks:
 
 - **Module exists** — `module_name` must match an entry in `ALL_MODULES`. An error is returned immediately if not found; use `pt_list_modules` to discover valid names.
 - **Slot is a non-empty string** — `null`, booleans, and empty strings are rejected.
-- **Device exists in PT** — a `queryTopology()` call confirms the device is in the active canvas.
-- **Module/router compatibility** — if the module has a `compatible_with` list, the device's reported model must appear in it.
+- **Device exists in PT** — a `queryTopology()` call confirms the device is in the active canvas (skipped when `dry_run=true`).
+- **Module/router compatibility** — if the module has a `compatible_with` list, the device's reported model must appear in it (checked live against PT, skipped when `dry_run=true`).
 
 ### Return value
 

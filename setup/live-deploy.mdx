@@ -1,5 +1,5 @@
 ---
-title: "Set Up Live Deploy to Cisco Packet Tracer"
+title: "Set Up the Live Deploy Bridge for Cisco Packet Tracer"
 sidebarTitle: "Live Deploy"
 description: "Configure the HTTP bridge that streams MCP tool commands directly into a running Cisco Packet Tracer instance — no manual copy-paste required."
 ---
@@ -14,7 +14,7 @@ Live Deploy is the feature that makes MCP Packet Tracer feel truly real-time: in
 
 The live deploy pipeline flows through four components:
 
-```
+```text
 ┌──────────┐  MCP   ┌──────────────────┐  HTTP   ┌─────────────────┐  $se()  ┌──────────────┐
 │   LLM    │ ─────▶ │  MCP Server      │ ──────▶ │  PTBuilder      │ ──────▶ │ Packet Tracer│
 │ Copilot  │        │  :39000          │ :54321  │  (WebView)      │  IPC    │  (Engine)    │
@@ -68,7 +68,7 @@ This separation is necessary because `XMLHttpRequest` is only available in the C
 
 **Checking bridge status from your AI client:**
 
-```
+```text
 pt_bridge_status
 ```
 

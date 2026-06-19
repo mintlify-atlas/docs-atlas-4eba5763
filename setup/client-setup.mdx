@@ -1,5 +1,5 @@
 ---
-title: "Connect MCP Packet Tracer to Your AI Client"
+title: "Connect MCP Packet Tracer to Your AI Client or Editor"
 sidebarTitle: "Client Setup"
 description: "Step-by-step instructions to register MCP Packet Tracer with Claude Code, Claude Desktop, VS Code, Cursor, Codex CLI, or any MCP-compatible client."
 ---
@@ -10,9 +10,7 @@ MCP Packet Tracer supports two transport modes: **stdio**, where the AI client s
   All examples below assume you have already installed the package by running:
 
   ```bash
-  git clone https://github.com/Mats2208/MCP-Packet-Tracer
-  cd MCP-Packet-Tracer
-  pip install -e .
+  git clone https://github.com/Mats2208/MCP-Packet-Tracer && cd MCP-Packet-Tracer && pip install -e .
   ```
 
   After `pip install -e .`, the `packet_tracer_mcp` module is importable from **any** directory, so `python -m packet_tracer_mcp --stdio` works without `cd`-ing into the repo first.
@@ -198,7 +196,7 @@ MCP Packet Tracer supports two transport modes: **stdio**, where the AI client s
 
 Once your client shows the server as connected, you can immediately ask your LLM to build a network:
 
-```
+```text
 "Create a network with 2 routers, 2 switches, 4 PCs, DHCP and static routing"
 ```
 

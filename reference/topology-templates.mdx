@@ -1,7 +1,7 @@
 ---
-title: "Topology Templates Reference"
+title: "Topology Templates Reference for MCP Packet Tracer"
 sidebarTitle: "Templates"
-description: "Reference for all 9 topology templates in MCP Packet Tracer — single_lan, multi_lan, star, hub_spoke, branch_office, and more — with default parameters."
+description: "Reference for all 9 topology templates in MCP Packet Tracer — single_lan, multi_lan, star, hub_spoke, branch_office, and more — with defaults."
 ---
 
 Topology templates are named presets that guide the orchestrator when it turns your natural-language request into a `TopologyPlan`. Each template encodes sensible defaults for router count, PCs per LAN, switch placement, WAN requirements, and routing protocol so you don't have to spell out every detail. When you include a `template` field in your request the orchestrator reads those defaults and fills in any missing values automatically. Templates are hints, not rigid blueprints — the LLM can override any individual parameter even when a template is active.
@@ -18,7 +18,7 @@ Topology templates are named presets that guide the orchestrator when it turns y
 | `multi_lan` | Multi LAN | N routers in a chain, each with its own LAN | static | 1 | 20 | 2 |
 | `multi_lan_wan` | Multi LAN + WAN | Multi-LAN topology plus a WAN Cloud node | static | 1 | 20 | 3 |
 | `star` | Star (Hub & Spoke) | 1 central router connected to N switches | static | 1 | 1 | 1 |
-| `hub_spoke` | Hub and Spoke | 1 hub router + N spoke routers, each with a LAN | eigrp | 1 | 20 | 4 |
+| `hub_spoke` | Hub and Spoke | 1 hub router + N spoke routers, each with a LAN | static | 1 | 20 | 4 |
 | `branch_office` | Branch Office | Headquarters + branches connected over WAN | static | 1 | 20 | 3 |
 | `router_on_a_stick` | Router on a Stick | 1 router + 1 switch for inter-VLAN routing | static | 1 | 1 | 1 |
 | `three_router_triangle` | Three Router Triangle | 3 routers in a triangle with redundancy | ospf | 3 | 3 | 3 |
@@ -52,7 +52,7 @@ A single central router with multiple switches hanging off it. All PCs connect t
 
 ### `hub_spoke`
 
-One hub router at the centre with N spoke routers connected directly to it. Each spoke has its own switch and LAN. The default routing protocol is **EIGRP** because hub-and-spoke is a classic EIGRP scenario in CCNA/CCNP labs. Default: 4 routers total (1 hub + 3 spokes), 2 PCs per LAN.
+One hub router at the centre with N spoke routers connected directly to it. Each spoke has its own switch and LAN. The default routing protocol is **static** — specify `routing="eigrp"` explicitly if you want EIGRP, which is a common choice for hub-and-spoke topologies in CCNA/CCNP labs. Default: 4 routers total (1 hub + 3 spokes), 2 PCs per LAN.
 
 **Best for:** EIGRP configuration, WAN topology simulation, enterprise branch design.
 
@@ -82,15 +82,15 @@ No enforced structure, no router count constraints, no default routing protocol.
 
 ## Specifying a Template in Your Request
 
-Include the `template` key in your `pt_plan_topology` or `pt_full_build` call:
+Include the `template` parameter in your `pt_plan_topology` or `pt_full_build` call:
 
-```json
-{
-  "template": "hub_spoke",
-  "routers": 5,
-  "pcs_per_lan": 3,
-  "routing": "eigrp"
-}
+```python
+pt_plan_topology(
+    template="hub_spoke",
+    routers=5,
+    pcs_per_lan=3,
+    routing="eigrp"
+)
 ```
 
 If you omit `template` the orchestrator defaults to `multi_lan`.
@@ -105,7 +105,7 @@ When you do not specify a `routing` field the template's `default_routing` value
 | `multi_lan` | `static` |
 | `multi_lan_wan` | `static` |
 | `star` | `static` |
-| `hub_spoke` | `eigrp` |
+| `hub_spoke` | `static` |
 | `branch_office` | `static` |
 | `router_on_a_stick` | `static` |
 | `three_router_triangle` | `ospf` |

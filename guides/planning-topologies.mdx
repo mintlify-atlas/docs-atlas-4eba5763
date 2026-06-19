@@ -1,5 +1,5 @@
 ---
-title: "Plan Network Topologies from Natural Language"
+title: "Plan Cisco Network Topologies from Natural Language"
 sidebarTitle: "Planning Topologies"
 description: "Use pt_plan_topology and pt_full_build to generate complete, validated Cisco network topologies from a plain-language description."
 ---
@@ -10,7 +10,7 @@ Topology planning in MCP Packet Tracer is the process of translating a plain-Eng
 
 Every topology starts as a `TopologyRequest` and ends as a `TopologyPlan`. The orchestrator pipeline looks like this:
 
-```
+```text
 TopologyRequest
       │
   Orchestrator ─── IPPlanner (assigns /24 LANs + /30 inter-router WAN links)
@@ -40,8 +40,8 @@ Templates are hints that guide the orchestrator's topology-building logic. Each 
 | `single_lan` | 1 router + 1 switch + N PCs — simplest local network | `static` |
 | `multi_lan` | N routers in a chain, each with their own LAN | `static` |
 | `multi_lan_wan` | Multi-LAN topology with a WAN Cloud node attached | `static` |
-| `star` | 1 central router connected to N switches (hub-and-spoke variant) | `ospf` |
-| `hub_spoke` | 1 hub router + N spoke routers, each spoke with its own LAN | `eigrp` |
+| `star` | 1 central router connected to N switches (hub-and-spoke variant) | `static` |
+| `hub_spoke` | 1 hub router + N spoke routers, each spoke with its own LAN | `static` |
 | `branch_office` | Headquarters + branch sites connected through a WAN cloud | `static` |
 | `router_on_a_stick` | 1 router + 1 switch for inter-VLAN routing via subinterfaces | `static` |
 | `three_router_triangle` | 3 routers in a triangle with route redundancy | `ospf` |
@@ -76,17 +76,16 @@ Both tools plan a topology, but they serve different purposes.
 
 ### Example Request
 
-The simplest call passes a natural-language description. You can optionally specify a template, routing protocol, number of routers, PCs per LAN, and more.
+`pt_plan_topology` accepts individual named parameters — not a JSON string. Pass each option directly. The tool picks sensible defaults for anything you omit.
 
-```json
-{
-  "description": "Build a network with 2 routers, 2 switches, 4 PCs, DHCP and static routing",
-  "template": "multi_lan",
-  "routing": "static",
-  "routers": 2,
-  "pcs_per_lan": 2,
-  "dhcp": true
-}
+```python
+pt_plan_topology(
+    routers=2,
+    pcs_per_lan=2,
+    template="multi_lan",
+    routing="static",
+    dhcp=True
+)
 ```
 
 ### Example Response (excerpt)
@@ -146,8 +145,8 @@ The simplest call passes a natural-language description. You can optionally spec
 </Accordion>
 
 <Accordion title="Use a template for common patterns">
-  Saying "hub-and-spoke topology" will pick the `hub_spoke` template with EIGRP routing
-  and 4 routers by default, which is much more efficient than describing every parameter.
+  Saying "hub-and-spoke topology" will pick the `hub_spoke` template with 4 routers by
+  default. Add `routing="eigrp"` to get EIGRP — a popular choice for hub-and-spoke labs.
 </Accordion>
 
 ## Next Steps

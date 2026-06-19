@@ -1,7 +1,7 @@
 ---
-title: "pt_plan_topology: Generate a TopologyPlan from Text"
+title: "pt_plan_topology: Generate a Complete TopologyPlan"
 sidebarTitle: "pt_plan_topology"
-description: "pt_plan_topology takes a natural-language description and returns a complete, addressed TopologyPlan JSON with devices, links, IPs, DHCP, routes, and modules."
+description: "pt_plan_topology takes named topology parameters and returns a complete TopologyPlan JSON with devices, links, IPs, DHCP, routing, and expansion modules."
 ---
 
 `pt_plan_topology` is the core planning tool in MCP Packet Tracer. Given a set of parameters describing the desired network, it runs the full orchestration pipeline — creating devices, assigning /24 LAN subnets and /30 inter-router links, generating DHCP pools, computing routing tables (static, OSPF, EIGRP, or RIP), and packaging everything into a single machine-readable `TopologyPlan` JSON object. The output can be fed directly into `pt_validate_plan`, `pt_fix_plan`, `pt_generate_script`, `pt_generate_configs`, and `pt_live_deploy`.
@@ -148,7 +148,7 @@ The returned `TopologyPlan` will contain:
 - OSPF process 1 configured on all three routers with `network ... area 0` for every subnet
 
 **IP addressing example output:**
-```
+```text
 LAN 1:  192.168.0.0/24  →  R1 Gig0/0: .1  | PC1: .2 | PC2: .3 | LT1: .4
 LAN 2:  192.168.1.0/24  →  R2 Gig0/0: .1  | PC3: .2 | PC4: .3 | LT2: .4
 LAN 3:  192.168.2.0/24  →  R3 Gig0/0: .1  | PC5: .2 | PC6: .3 | LT3: .4

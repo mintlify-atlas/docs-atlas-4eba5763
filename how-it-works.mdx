@@ -1,5 +1,5 @@
 ---
-title: "How MCP Packet Tracer Plans and Deploys Networks"
+title: "How MCP Packet Tracer Plans and Deploys Cisco Networks"
 sidebarTitle: "How It Works"
 description: "Explore the planning, validation, generation, and live-deploy pipeline inside MCP Packet Tracer, from natural language prompt to running topology."
 ---
@@ -8,7 +8,7 @@ When you ask your AI assistant to "create a network with 3 routers, OSPF, and DH
 
 ## Full Data Flow
 
-```
+```text
 TopologyRequest
       │
   Orchestrator ─── IPPlanner (assigns /24 LANs + /30 inter-router links)
@@ -29,7 +29,7 @@ PTBuilder Script ── sent via HTTP bridge ─▶ Packet Tracer Script Engine
 
 And from a higher vantage point, the complete system looks like this:
 
-```
+```text
 Natural language prompt
         │
   LLM (GitHub Copilot / Claude / Codex)

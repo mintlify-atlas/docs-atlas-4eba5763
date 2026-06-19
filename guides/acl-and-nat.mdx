@@ -1,7 +1,7 @@
 ---
-title: "Apply ACLs and NAT to Live Routers via MCP"
+title: "Apply ACLs and NAT to Live Packet Tracer Routers via MCP"
 sidebarTitle: "ACL & NAT"
-description: "Use pt_apply_acl and pt_apply_nat to configure access control lists and address translation on live Cisco Packet Tracer routers via the HTTP bridge."
+description: "Use pt_apply_acl, pt_apply_acl_object, and pt_apply_nat to configure access control lists and NAT on live Cisco Packet Tracer routers."
 ---
 
 After a topology is deployed into Packet Tracer, you can continue modifying live routers without redeploying the entire topology. The `pt_apply_acl` and `pt_apply_nat` tools send `configureIosDevice` commands through the HTTP bridge at port `54321`, applying access control lists and NAT translations to routers that are already running in the canvas. These tools work independently of `pt_live_deploy` — they can target any existing device by name.
@@ -30,37 +30,30 @@ The `pt_apply_acl` tool accepts an `ACLPlan` describing the router, ACL identifi
 
 **Example — extended ACL blocking HTTP from LAN to a server:**
 
-```json
-{
-  "router": "R1",
-  "acl_plan": {
-    "router": "R1",
-    "name_or_number": "101",
-    "acl_type": "extended",
-    "entries": [
-      {
-        "action": "deny",
-        "protocol": "tcp",
-        "source": "192.168.0.0 0.0.0.255",
-        "destination": "host 192.168.1.100",
-        "dest_port_op": "eq",
-        "dest_port": 80
-      },
-      {
-        "action": "permit",
-        "protocol": "ip",
-        "source": "any",
-        "destination": "any"
-      }
-    ]
-  },
-  "binding": {
-    "router": "R1",
-    "interface": "GigabitEthernet0/0",
-    "acl_id": "101",
-    "direction": "in"
-  }
-}
+```python
+pt_apply_acl(
+    router="R1",
+    name_or_number="101",
+    acl_type="extended",
+    entries=[
+        {
+            "action": "deny",
+            "protocol": "tcp",
+            "source": "192.168.0.0 0.0.0.255",
+            "destination": "host 192.168.1.100",
+            "dest_port_op": "eq",
+            "dest_port": 80
+        },
+        {
+            "action": "permit",
+            "protocol": "ip",
+            "source": "any",
+            "destination": "any"
+        }
+    ],
+    binding_interface="GigabitEthernet0/0",
+    binding_direction="in"
+)
 ```
 
 **IOS commands generated and sent to Packet Tracer:**
@@ -86,17 +79,26 @@ Before sending any commands, `pt_apply_acl` validates:
 - **Protocol/port coherence** — port operators (`eq`, `lt`, `gt`, `range`) are only valid for `tcp` and `udp`; ICMP types only apply to `icmp`
 - **Unreachable rules** — entries after an `permit ip any any` or `deny ip any any` that will never match are flagged
 
+### Object API Variants
+
+In addition to the CLI-based tools above, MCP Packet Tracer provides two Object API variants that drive Packet Tracer's `AclProcess` JavaScript API directly instead of sending IOS `access-list` commands through `configureIosDevice`. These are useful when working with the live bridge in environments where CLI passthrough is unavailable or unreliable.
+
+- **`pt_apply_acl_object`** — applies an ACL using the Object API (`AclProcess` JS API)
+- **`pt_remove_acl_object`** — removes an ACL using the Object API
+
+See the [ACL tool reference](/tools/pt-acl) for full parameter details on all four ACL tools.
+
 ### Removing an ACL
 
 `pt_remove_acl` removes the ACL definition and, optionally, its interface binding.
 
-```json
-{
-  "router": "R1",
-  "acl_id": "101",
-  "binding_interface": "GigabitEthernet0/0",
-  "direction": "in"
-}
+```python
+pt_remove_acl(
+    router="R1",
+    name_or_number="101",
+    binding_interface="GigabitEthernet0/0",
+    binding_direction="in"
+)
 ```
 
 Generated commands:
@@ -128,21 +130,18 @@ Three NAT modes map directly to the three IOS NAT variants taught in CCNA.
 
 ### Applying PAT (Most Common)
 
-PAT with `use_interface_overload: true` is the typical home and enterprise scenario — the outside interface's IP is used directly, so no pool is needed.
+PAT with `use_interface_overload=True` is the typical home and enterprise scenario — the outside interface's IP is used directly, so no pool is needed. `pt_apply_nat` takes flat individual parameters:
 
-```json
-{
-  "router": "R1",
-  "nat_config": {
-    "router": "R1",
-    "mode": "pat",
-    "inside_interface": "GigabitEthernet0/0",
-    "outside_interface": "GigabitEthernet0/1",
-    "acl_number": "1",
-    "inside_networks": ["192.168.0.0 0.0.0.255"],
-    "use_interface_overload": true
-  }
-}
+```python
+pt_apply_nat(
+    router="R1",
+    mode="pat",
+    inside_interface="GigabitEthernet0/0",
+    outside_interface="GigabitEthernet0/1",
+    acl_number="1",
+    inside_networks=["192.168.0.0 0.0.0.255"],
+    use_interface_overload=True
+)
 ```
 
 **IOS commands generated and sent to Packet Tracer:**
@@ -166,19 +165,16 @@ write memory
 
 Static NAT maps individual private IPs to fixed public IPs with a 1:1 relationship.
 
-```json
-{
-  "router": "R1",
-  "nat_config": {
-    "router": "R1",
-    "mode": "static",
-    "inside_interface": "GigabitEthernet0/0",
-    "outside_interface": "GigabitEthernet0/1",
-    "static_mappings": [
-      { "inside_local": "192.168.0.10", "inside_global": "200.1.1.5" }
+```python
+pt_apply_nat(
+    router="R1",
+    mode="static",
+    inside_interface="GigabitEthernet0/0",
+    outside_interface="GigabitEthernet0/1",
+    static_mappings=[
+        {"inside_local": "192.168.0.10", "inside_global": "200.1.1.5"}
     ]
-  }
-}
+)
 ```
 
 Generated commands:
@@ -195,26 +191,21 @@ ip nat inside source static 192.168.0.10 200.1.1.5
 
 ### Applying Dynamic NAT (Pool)
 
-Dynamic NAT assigns public IPs from a pool on demand. Requires a `pool` object in the config.
+Dynamic NAT assigns public IPs from a pool on demand. Pass pool parameters as individual fields:
 
-```json
-{
-  "router": "R1",
-  "nat_config": {
-    "router": "R1",
-    "mode": "dynamic",
-    "inside_interface": "GigabitEthernet0/0",
-    "outside_interface": "GigabitEthernet0/1",
-    "acl_number": "1",
-    "inside_networks": ["192.168.0.0 0.0.0.255"],
-    "pool": {
-      "name": "NAT-POOL",
-      "start_ip": "200.1.1.1",
-      "end_ip": "200.1.1.10",
-      "netmask": "255.255.255.0"
-    }
-  }
-}
+```python
+pt_apply_nat(
+    router="R1",
+    mode="dynamic",
+    inside_interface="GigabitEthernet0/0",
+    outside_interface="GigabitEthernet0/1",
+    acl_number="1",
+    inside_networks=["192.168.0.0 0.0.0.255"],
+    pool_name="NAT-POOL",
+    pool_start="200.1.1.1",
+    pool_end="200.1.1.10",
+    pool_netmask="255.255.255.0"
+)
 ```
 
 Generated commands:
@@ -229,14 +220,14 @@ ip nat inside source list 1 pool NAT-POOL
 
 `pt_remove_nat` removes all NAT rules, the pool, the ACL, and the inside/outside interface markings.
 
-```json
-{
-  "router": "R1",
-  "mode": "pat",
-  "inside_interface": "GigabitEthernet0/0",
-  "outside_interface": "GigabitEthernet0/1",
-  "acl_number": "1"
-}
+```python
+pt_remove_nat(
+    router="R1",
+    mode="pat",
+    inside_interface="GigabitEthernet0/0",
+    outside_interface="GigabitEthernet0/1",
+    acl_number="1"
+)
 ```
 
 Generated commands:

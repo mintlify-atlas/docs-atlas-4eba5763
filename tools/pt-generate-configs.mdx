@@ -1,10 +1,10 @@
 ---
 title: "pt_generate_configs: Generate IOS CLI Config Blocks"
-sidebarTitle: "pt_generate_configs"
+sidebarTitle: "Generate Configs"
 description: "pt_generate_configs produces per-device IOS CLI configuration blocks from a TopologyPlan, covering interfaces, DHCP, OSPF, EIGRP, RIP, and static routes."
 ---
 
-`pt_generate_configs` reads a validated `TopologyPlan` and generates complete, copy-paste-ready IOS CLI configuration blocks for every router and switch in the topology. Each block starts from `enable` / `configure terminal`, configures all interfaces with their assigned IP addresses and `no shutdown`, builds DHCP pools, and adds the full routing protocol configuration — all derived automatically from the plan's IP assignments and routing settings. PC, laptop, and server configurations are appended as human-readable IP/gateway summaries.
+`pt_generate_configs` reads a validated `TopologyPlan` and generates complete, copy-paste-ready IOS CLI configuration blocks for every router and switch in the topology. Each block starts from `enable` / `configure terminal`, configures all interfaces with their assigned IP addresses and `no shutdown`, builds DHCP pools, and adds the full routing protocol configuration — all derived automatically from the plan's IP assignments and routing settings. PC, laptop, and server configurations are appended as human-readable IP/gateway summaries under a separate host section.
 
 ## Parameters
 
@@ -15,7 +15,7 @@ description: "pt_generate_configs produces per-device IOS CLI configuration bloc
 ## Return value
 
 <ResponseField name="configs" type="string">
-  A formatted string containing one labeled section per device. Each router section is a full IOS CLI block. Each PC / server / laptop section shows the static IP or DHCP instruction. Sections are separated by `=== DeviceName ===` headers.
+  A plain-text string containing one labeled section per device. Each router and switch section is a full IOS CLI block ready to paste into the device's CLI tab. End-device sections show static IP values or DHCP instructions. Router and switch sections are separated by `=== DeviceName ===` headers; the host summary section is introduced by `=== Configuración de hosts ===`. The output is plain text, not JSON.
 </ResponseField>
 
 ## What configs cover
@@ -35,12 +35,14 @@ Each router config block includes every applicable section in this order:
 
 Switch configs include only `hostname` and `write memory` — L2 switches carry no IP routing configuration by default.
 
-## Example config block
+## Example output format
 
-The following block is representative output for a router running OSPF with a DHCP pool on its LAN interface:
+The return value is a plain-text string structured as shown below. Each device block is introduced by an `=== DeviceName ===` header followed by the CLI commands on subsequent lines:
 
 ```
-R1# configure terminal
+=== R1 ===
+enable
+configure terminal
 hostname R1
 no ip domain-lookup
 
@@ -69,6 +71,8 @@ router ospf 1
 
 end
 write memory
+
+=== Configuración de hosts ===
 ```
 
 ## PC and host configurations

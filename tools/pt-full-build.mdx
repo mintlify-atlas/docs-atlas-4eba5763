@@ -1,7 +1,7 @@
 ---
-title: "pt_full_build: All-in-One Network Build Pipeline"
+title: "pt_full_build: Single-Call Complete Network Build Tool"
 sidebarTitle: "pt_full_build"
-description: "pt_full_build runs the complete plan → validate → fix → generate → explain → estimate pipeline in one call and returns a human-readable deployment report."
+description: "pt_full_build runs plan, validate, fix, generate, explain, and estimate in one call and returns a human-readable, sectioned deployment report."
 ---
 
 `pt_full_build` is the single-call shortcut for the entire MCP Packet Tracer pipeline. Given the same parameters as `pt_plan_topology`, it internally runs planning, validation, auto-fixing, PTBuilder script generation, IOS CLI config generation, natural-language explanation, and estimation — and returns everything in one formatted, human-readable report. It is the fastest way to go from a topology description to a complete, copy-pasteable build package, and it optionally copies the PTBuilder script directly to the Windows clipboard.
@@ -78,7 +78,7 @@ description: "pt_full_build runs the complete plan → validate → fix → gene
 
 `pt_full_build` executes the following pipeline in a single call:
 
-```
+```text
 pt_plan_topology   →  builds the TopologyPlan
 pt_validate_plan   →  checks for errors and warnings
 pt_fix_plan        →  auto-corrects cables, ports, model upgrades
@@ -97,14 +97,14 @@ If `deploy=True`, it also copies the script to the clipboard and writes project 
 | Section | Contents |
 |---------|----------|
 | `RESUMEN DE TOPOLOGÍA` | Device count, link count, DHCP pool count, routing config counts |
-| Validation status | `✅ Validación: PASS` or per-error breakdown |
+| Validation status | `✅ Validación: PASS` or per-error breakdown (inline, not a named section) |
 | `EXPLICACIÓN` | Bullet-point natural-language plan explanation |
 | `TABLA DE DIRECCIONAMIENTO` | Per-device interface-to-IP mapping with gateways |
 | `SCRIPT PTBUILDER` | Complete PTBuilder JS (`addDevice`, `addModule`, `addLink`, `configureIosDevice`) |
 | `CONFIGURACIONES CLI` | Per-device IOS CLI configuration blocks |
-| `VERIFICACIONES SUGERIDAS` | Suggested ping tests to run post-deploy |
-| `DESPLIEGUE EN PACKET TRACER` | Clipboard status and paste instructions (when `deploy=True`) |
-| `PLAN JSON` | The full `TopologyPlan` JSON appended at the end for reference |
+| `VERIFICACIONES SUGERIDAS` | Suggested ping tests to run post-deploy (only present when validations exist) |
+| `DESPLIEGUE EN PACKET TRACER` | Clipboard status and paste instructions (only present when `deploy=True`) |
+| `PLAN JSON (para uso programático)` | The full `TopologyPlan` JSON appended at the end for reference |
 
 <Warning>
 The output of `pt_full_build` is a **human-readable formatted report**, not machine-readable JSON. You cannot pass the output of `pt_full_build` directly as `plan_json` to `pt_live_deploy`, `pt_generate_configs`, or `pt_validate_plan`. If you need the raw JSON plan to drive downstream tools, use `pt_plan_topology` instead. The JSON plan is included at the bottom of the report under `PLAN JSON` for manual reference only.
@@ -114,7 +114,7 @@ The output of `pt_full_build` is a **human-readable formatted report**, not mach
 
 The following is a condensed version of the summary sections returned for a `pt_full_build` call with `routers=2`, `pcs_per_lan=2`, `routing="static"`:
 
-```
+```text
 ============================================================
 RESUMEN DE TOPOLOGÍA
 ============================================================
@@ -156,7 +156,7 @@ PC4: DHCP (Gateway: 192.168.1.1)
 
 This matches the README quick example:
 
-```
+```text
 Devices (8):  R1, R2 (2911), SW1, SW2 (2960-24TT), PC1, PC2, PC3, PC4 (PC-PT)
 Links   (7):  R1<->R2 (cross), R1<->SW1 (straight), R2<->SW2 (straight),
               SW1<->PC1, SW1<->PC2, SW2<->PC3, SW2<->PC4 (all straight)

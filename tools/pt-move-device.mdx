@@ -1,7 +1,7 @@
 ---
-title: "pt_move_device: Reposition a Device on the Canvas"
-sidebarTitle: "pt_move_device"
-description: "pt_move_device repositions a device to new x,y canvas coordinates in the active Packet Tracer topology via the HTTP bridge."
+title: "pt_move_device: Reposition a Device on the PT Canvas"
+sidebarTitle: "Move Device"
+description: "pt_move_device repositions a named device to new x,y canvas coordinates in the active Packet Tracer topology via the HTTP bridge on port 54321."
 ---
 
 `pt_move_device` sends a `moveDevice(name, x, y)` call to the Packet Tracer Script Engine via the HTTP bridge, repositioning the named device's icon to the specified canvas coordinates. All cables attached to the device stretch or reroute automatically to follow the new position — no links are dropped. The move is cosmetic only: IP configurations, routing, and interfaces are unaffected.

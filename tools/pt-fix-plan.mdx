@@ -1,7 +1,7 @@
 ---
-title: "pt_fix_plan: Auto-Fix Common Topology Errors"
+title: "pt_fix_plan: Auto-Correct Common Topology Plan Errors"
 sidebarTitle: "pt_fix_plan"
-description: "pt_fix_plan automatically corrects wrong cables, missing ports, and router model mismatches in a TopologyPlan and returns the corrected plan JSON."
+description: "pt_fix_plan automatically corrects wrong cable types, missing ports, and router model mismatches in a TopologyPlan and returns the corrected plan JSON."
 ---
 
 `pt_fix_plan` is the automatic repair tool in the MCP Packet Tracer pipeline. It takes a `TopologyPlan` JSON — typically one that has just been flagged by `pt_validate_plan` — and applies three sequential fix passes: correcting wrong cable types based on device categories, upgrading router models when they do not have enough GigabitEthernet ports for their declared links, and reassigning invalid port names to the first available valid port on each device. After all fixes are applied, the plan is re-validated internally and the corrected plan is returned alongside a list of every change made.
@@ -60,7 +60,7 @@ If a link references a port name that does not exist on the device model (e.g. `
 
 The recommended pattern is to validate first, fix, then validate again to confirm:
 
-```
+```text
 pt_plan_topology(...)
   → returns plan_json
 

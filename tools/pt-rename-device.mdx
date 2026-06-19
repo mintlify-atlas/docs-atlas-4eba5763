@@ -1,7 +1,7 @@
 ---
 title: "pt_rename_device: Rename a Device in Packet Tracer"
-sidebarTitle: "pt_rename_device"
-description: "pt_rename_device changes a device's display name in the active Packet Tracer topology without removing it or its connections."
+sidebarTitle: "Rename Device"
+description: "pt_rename_device changes a device's display name in the active Packet Tracer topology via the bridge, without removing it or its connections."
 ---
 
 `pt_rename_device` sends a `renameDevice(oldName, newName)` call to the Packet Tracer Script Engine via the HTTP bridge. The device's icon label is updated on the canvas and its identity in the internal network model changes to the new name — all existing cable connections remain intact. No interfaces, IP configurations, or routing settings are affected by the rename.

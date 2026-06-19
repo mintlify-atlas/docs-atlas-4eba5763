@@ -1,5 +1,5 @@
 ---
-title: "Automatic IP Addressing and DHCP Pool Generation"
+title: "Automatic IP Addressing and DHCP Pool Generation in PT"
 sidebarTitle: "IP Addressing"
 description: "How MCP Packet Tracer auto-assigns /24 LAN subnets, /30 inter-router WAN links, and DHCP pools with gateway at .1 and sequential host IPs from .2."
 ---
@@ -36,7 +36,7 @@ Two non-overlapping address spaces are used. LAN subnets are carved from `192.16
 
 The canonical two-router topology with two switches and four PCs produces this addressing:
 
-```
+```text
 LAN 1: 192.168.0.0/24
   R1  GigabitEthernet0/0 → 192.168.0.1
   PC1 FastEthernet0      → 192.168.0.2

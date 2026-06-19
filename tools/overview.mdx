@@ -1,7 +1,7 @@
 ---
-title: "MCP Tools Reference: 33 Tools for Packet Tracer"
+title: "MCP Packet Tracer Tools: Complete 33-Tool Reference"
 sidebarTitle: "Overview"
-description: "Complete reference index for all 33 MCP Packet Tracer tools grouped by function: planning, validation, generation, deploy, topology interaction, modules, ACL, and NAT."
+description: "Reference for all 33 MCP Packet Tracer tools grouped by function: planning, validation, generation, deploy, topology interaction, modules, ACL, and NAT."
 ---
 
 MCP Packet Tracer exposes 33 MCP tools that give any LLM full programmatic control over Cisco Packet Tracer. Together they cover the complete network engineering workflow: translating a natural-language description into a validated `TopologyPlan`, generating PTBuilder JavaScript and IOS CLI configs, deploying the topology live into a running Packet Tracer instance, and then managing that topology interactively — querying, renaming, moving devices, installing expansion modules, and applying ACL and NAT policies. Every tool is callable from any MCP client (GitHub Copilot, Claude, Codex, Cursor) without leaving the editor.
@@ -13,7 +13,7 @@ MCP Packet Tracer exposes 33 MCP tools that give any LLM full programmatic contr
 | **Catalog** | 3 | List supported devices, templates, and per-model port details |
 | **Estimation** | 1 | Dry-run count of devices, links, and configs before planning |
 | **Planning** | 1 | Generate a complete `TopologyPlan` JSON from parameters |
-| **Validation & Fixing** | 3 | Validate plans against 24 error codes, auto-fix common issues, explain decisions |
+| **Validation & Fixing** | 3 | Validate plans against 34 error codes, auto-fix common issues, explain decisions |
 | **Generation** | 2 | Generate PTBuilder JS scripts and IOS CLI config blocks |
 | **Full Pipeline** | 1 | Single-call plan + validate + generate + explain + estimate |
 | **Deploy** | 3 | Copy script to clipboard, live-deploy to PT via bridge, check bridge status |
@@ -32,7 +32,7 @@ MCP Packet Tracer exposes 33 MCP tools that give any LLM full programmatic contr
 | `pt_get_device_details` | Returns full port and interface details for a specific device model |
 | `pt_estimate_plan` | Dry-run estimation — counts devices, links, and configs without generating the full plan |
 | `pt_plan_topology` | Generates a complete `TopologyPlan` — devices, links, IPs, DHCP, routes, and modules |
-| `pt_validate_plan` | Validates a `TopologyPlan` against 24 typed error codes, returning errors and warnings |
+| `pt_validate_plan` | Validates a `TopologyPlan` against 34 typed error codes, returning errors and warnings |
 | `pt_fix_plan` | Auto-corrects common plan errors: wrong cables, missing ports, and router model upgrades |
 | `pt_explain_plan` | Returns a natural-language explanation of every decision in the plan |
 | `pt_generate_script` | Generates the PTBuilder JavaScript script (`addDevice`, `addModule`, `addLink`) |
@@ -65,7 +65,7 @@ MCP Packet Tracer exposes 33 MCP tools that give any LLM full programmatic contr
 
 The tools are designed to work together as a pipeline. A natural-language request flows through planning, validation, generation, and finally deployment into a live Packet Tracer instance.
 
-```
+```text
 Natural language prompt
   ↓ pt_plan_topology / pt_full_build
 TopologyPlan (JSON)
@@ -90,7 +90,7 @@ Running Packet Tracer Topology
     Generate a complete TopologyPlan from a natural-language description
   </Card>
   <Card title="pt_validate_plan" icon="circle-check" href="/tools/pt-validate-plan">
-    Validate a TopologyPlan against 24 typed error codes
+    Validate a TopologyPlan against 34 typed error codes
   </Card>
   <Card title="pt_fix_plan" icon="wrench" href="/tools/pt-fix-plan">
     Auto-fix cables, ports, and router model mismatches

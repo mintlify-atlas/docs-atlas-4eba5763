@@ -1,7 +1,7 @@
 ---
-title: "Get Started with MCP Packet Tracer in 5 Minutes"
+title: "Quickstart Guide: Install and Use MCP Packet Tracer"
 sidebarTitle: "Quickstart"
-description: "Install MCP Packet Tracer, connect it to your AI client, and deploy your first Cisco network topology in under five minutes."
+description: "Install MCP Packet Tracer, connect it to your AI client, and deploy your first fully configured Cisco network topology in under five minutes."
 ---
 
 By the end of this guide you will have the MCP Packet Tracer server installed, wired up to your AI client of choice, and ready to generate a fully addressed, validated Cisco network topology — complete with IOS CLI configs, DHCP pools, and routing configuration — from a single natural-language prompt. Live deployment into a running Packet Tracer instance is optional and takes one extra step.
@@ -13,9 +13,7 @@ By the end of this guide you will have the MCP Packet Tracer server installed, w
 Clone the repository and install the package in editable mode. After this, the `packet_tracer_mcp` module is importable from any directory — you do not need to keep a terminal open in the repo folder.
 
 ```bash
-git clone https://github.com/Mats2208/MCP-Packet-Tracer
-cd MCP-Packet-Tracer
-pip install -e .
+git clone https://github.com/Mats2208/MCP-Packet-Tracer && cd MCP-Packet-Tracer && pip install -e .
 ```
 
 The only runtime dependencies (`mcp[cli]>=1.0.0` and `pydantic>=2.0.0`) are installed automatically.
@@ -73,13 +71,13 @@ For full setup details and troubleshooting, see [Live Deploy Setup](/setup/live-
 
 With the server connected, ask your AI assistant to build a topology in plain English:
 
-```
+```text
 "Create a network with 2 routers, 2 switches, 4 PCs, DHCP and static routing"
 ```
 
 The server handles the complete pipeline — **planning → validation → generation → deploy** — and returns a human-readable summary. Here is what `pt_full_build` produces for this prompt:
 
-```
+```text
 Devices (8):  R1, R2 (2911), SW1, SW2 (2960-24TT), PC1, PC2, PC3, PC4 (PC-PT)
 Links   (7):  R1<->R2 (cross), R1<->SW1 (straight), R2<->SW2 (straight),
               SW1<->PC1, SW1<->PC2, SW2<->PC3, SW2<->PC4 (all straight)

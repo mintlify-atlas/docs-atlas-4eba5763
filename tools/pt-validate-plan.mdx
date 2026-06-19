@@ -1,10 +1,10 @@
 ---
-title: "pt_validate_plan: Validate a TopologyPlan"
+title: "pt_validate_plan: Validate TopologyPlan JSON Input"
 sidebarTitle: "pt_validate_plan"
-description: "pt_validate_plan checks a TopologyPlan against 24 typed error codes, flagging device model errors, port conflicts, cable mismatches, and IP issues."
+description: "pt_validate_plan checks a TopologyPlan against 34 typed error codes, flagging device model errors, port conflicts, cable mismatches, and IP issues."
 ---
 
-`pt_validate_plan` runs a structured validation pass over a `TopologyPlan` JSON and returns a typed result containing errors, warnings, and a validity flag. The validation engine checks four categories independently — device models, cable types and port conflicts, IP addressing, and DHCP — and collects all issues before returning, so you see every problem in a single call rather than fixing one at a time. Each error carries a machine-readable `error_code` from a fixed set of 24 codes, a human-readable `message`, the affected `device`, and a `suggestion` for how to fix it.
+`pt_validate_plan` runs a structured validation pass over a `TopologyPlan` JSON and returns a typed result containing errors, warnings, and a validity flag. The validation engine checks multiple categories independently — device models, cable types and port conflicts, IP addressing, DHCP, routing, ACL, and NAT — and collects all issues before returning, so you see every problem in a single call rather than fixing one at a time. Each error carries a machine-readable `error_code` from a fixed set of 34 codes, a human-readable `message`, the affected `device`, and a `suggestion` for how to fix it.
 
 ## Parameter
 
@@ -38,9 +38,9 @@ description: "pt_validate_plan checks a TopologyPlan against 24 typed error code
   A one-line human-readable summary: `"✅ Plan válido. Sin errores."` or `"❌ Plan con N error(es)."`.
 </ResponseField>
 
-## 24 Error Codes
+## 34 Error Codes
 
-The validator reports errors using a fixed taxonomy of `ErrorCode` values. The table below groups them by category.
+The validator reports errors using a fixed taxonomy of `ErrorCode` values. The table below groups them by category. In addition, two special pre-validation codes — `INVALID_JSON` (unparseable input) and `EMPTY_PLAN` (missing or empty `devices` array) — are returned before any domain checks run.
 
 ### Device Errors
 
@@ -102,9 +102,11 @@ The validator reports errors using a fixed taxonomy of `ErrorCode` values. The t
 | `NAT_ROUTER_NOT_FOUND` | NAT config references a router not in the topology |
 | `NAT_INTERFACE_NOT_FOUND` | Inside or outside interface not found on the router |
 | `NAT_INVALID_IP` | A static NAT mapping contains a malformed IP address |
+| `NAT_INVALID_NETMASK` | A NAT pool or static mapping contains an invalid subnet mask |
 | `NAT_POOL_RANGE_INVALID` | The NAT pool start IP is higher than the pool end IP |
 | `NAT_MISSING_INSIDE_NETWORKS` | Dynamic or PAT mode requires `inside_networks` but none were provided |
 | `NAT_MISSING_STATIC_MAPPINGS` | Static NAT mode requires `static_mappings` but none were provided |
+| `NAT_MISSING_POOL` | Dynamic NAT mode requires a named pool but none was defined |
 | `NAT_SAME_INTERFACE` | Inside and outside interfaces are the same interface |
 
 ### General Errors

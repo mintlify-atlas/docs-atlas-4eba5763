@@ -1,6 +1,6 @@
 ---
-title: "pt_live_deploy: Stream Commands to Packet Tracer"
-sidebarTitle: "pt_live_deploy"
+title: "pt_live_deploy: Stream Commands to Packet Tracer Live"
+sidebarTitle: "Live Deploy"
 description: "pt_live_deploy sends the full PTBuilder script to a running Packet Tracer instance via the HTTP bridge on port 54321 — no copy-paste required."
 ---
 
@@ -19,14 +19,14 @@ description: "pt_live_deploy sends the full PTBuilder script to a running Packet
 ## Return value
 
 <ResponseField name="result" type="string">
-  A summary string reporting the number of commands sent, the number of devices, and the number of links in the deployed topology. Example: `"Topologia desplegada en Packet Tracer!\n  Comandos enviados: 21\n  Dispositivos: 8\n  Enlaces: 7"`.
+  A summary string reporting how many commands were sent and how many devices and links were deployed. Example: `"Topologia desplegada en Packet Tracer!\n  Comandos enviados: 21\n  Dispositivos: 8\n  Enlaces: 7"`.
 </ResponseField>
 
 ## Prerequisites
 
-Before calling `pt_live_deploy`, the HTTP bridge must be active and PTBuilder must be polling it. The MCP server starts the bridge automatically as an in-process thread when it registers tools — you do **not** need to run `start_bridge.ps1` or any external process. You only need to paste the bootstrap snippet once per Packet Tracer session.
+Before calling `pt_live_deploy`, the HTTP bridge must be active and PTBuilder must be polling it. The MCP server starts the bridge automatically as an in-process daemon thread when it registers tools — you do **not** need to run `start_bridge.ps1` or any external process. You only need to paste the bootstrap snippet once per Packet Tracer session.
 
-**Bootstrap snippet** (paste into Extensions → Builder Code Editor, then click Run):
+**Bootstrap snippet** (paste into **Extensions → Builder Code Editor**, then click Run):
 
 ```javascript
 /* PT-MCP Bridge */ window.webview.evaluateJavaScriptAsync("setInterval(function(){var x=new XMLHttpRequest();x.open('GET','http://127.0.0.1:54321/next',true);x.onload=function(){if(x.status===200&&x.responseText){$se('runCode',x.responseText)}};x.onerror=function(){};x.send()},500)");
@@ -35,7 +35,7 @@ Before calling `pt_live_deploy`, the HTTP bridge must be active and PTBuilder mu
 This injects a `setInterval` into the PTBuilder webview (a Chromium QWebEngine context that has full `XMLHttpRequest` support). Every 500 ms the webview fetches `/next` from the bridge; when a command is queued, it calls `$se('runCode', cmd)` to execute it in Packet Tracer's Script Engine.
 
 <Warning>
-  The HTTP bridge must be active and PTBuilder must be polling before you call `pt_live_deploy`. If the bridge is up but PT is not connected, the tool returns the bootstrap snippet with instructions rather than deploying. Call `pt_bridge_status` first to confirm the connection is ready.
+  The bridge starts automatically, but PTBuilder must have the bootstrap running before you call `pt_live_deploy`. If the bridge is up but PT is not connected, the tool returns the bootstrap snippet with instructions rather than deploying. Call `pt_bridge_status` first to confirm the connection is ready.
 </Warning>
 
 ## What happens during deployment
@@ -64,7 +64,7 @@ PTBuilder WebView (Chromium / QWebEngine)
     │  $se('runCode', cmd)
     ▼
 Packet Tracer Script Engine
-    │  executes addDevice, addLink, configureIosDevice, ...
+    │  executes lwAddDevice, lwAddLink, configureIosDevice, ...
     ▼
 Packet Tracer Canvas
 ```
@@ -73,9 +73,9 @@ Packet Tracer Canvas
 
 | Symptom | Likely cause | Fix |
 |---------|-------------|-----|
-| "Bridge activo pero PT NO está conectado" | Bootstrap not pasted or PT was restarted | Paste bootstrap in Builder Code Editor → Run |
+| "Bridge activo pero PT NO está conectado" | Bootstrap not pasted or PT was restarted | Paste bootstrap in Extensions → Builder Code Editor → Run |
 | Devices appear but configs not applied | `command_delay` too low | Increase to `2.0` or higher |
-| Nothing appears in PT | Bridge not running on `:54321` | Check `pt_bridge_status` |
+| Nothing appears in PT | Bridge not responding | Check `pt_bridge_status` — bridge auto-starts but verify it's running |
 | Error popups in PT | `configureIosDevice` ran before device booted | Increase `command_delay` |
 
 For full bridge setup instructions, see [Live Deploy Setup](/setup/live-deploy).

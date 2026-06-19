@@ -1,7 +1,7 @@
 ---
-title: "Stdio vs Streamable-HTTP Transport Modes"
+title: "MCP Packet Tracer Transport Modes: Stdio vs Streamable-HTTP"
 sidebarTitle: "Transport Modes"
-description: "Compare MCP Packet Tracer's two transport modes — stdio for desktop clients and streamable-HTTP for shared or remote scenarios — and choose the right one."
+description: "Compare stdio and streamable-HTTP transport modes in MCP Packet Tracer. Use stdio for desktop clients or HTTP for shared, persistent, multi-window setups."
 ---
 
 MCP Packet Tracer exposes two transport modes for connecting AI clients: **stdio**, where the client spawns and owns the server process, and **streamable-HTTP**, where the server runs independently and any number of clients connect to it over `http://127.0.0.1:39000/mcp`. Both modes give you full access to all 33 MCP tools and 5 resources; the difference is entirely in lifecycle, persistence, and multi-client sharing.

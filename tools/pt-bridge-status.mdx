@@ -1,6 +1,6 @@
 ---
 title: "pt_bridge_status: Check the HTTP Bridge Connection"
-sidebarTitle: "pt_bridge_status"
+sidebarTitle: "Bridge Status"
 description: "pt_bridge_status checks whether the HTTP bridge on port 54321 is active and PTBuilder is polling, confirming live deploy is ready."
 ---
 
@@ -16,7 +16,7 @@ This tool takes no parameters.
   A human-readable status string. Possible responses:
 
   - **`"Bridge ACTIVO y CONECTADO. Packet Tracer esta recibiendo comandos en http://127.0.0.1:54321"`** — the bridge is running and PTBuilder polled within the last 5 seconds. Live deploy is ready.
-  - **`"Bridge activo en http://127.0.0.1:54321 pero PT NO esta conectado.\n\nPega esto en Builder Code Editor ... y haz clic en Run:\n\n<bootstrap snippet>"`** — the bridge HTTP server is running but no recent poll from PTBuilder was detected. The bootstrap snippet is included for copy-pasting.
+  - **`"Bridge activo en http://127.0.0.1:54321 pero PT NO esta conectado.\n\nPega esto en Builder Code Editor ... y haz clic en Run:\n\n<bootstrap snippet>"`** — the bridge HTTP server is running but no recent poll from PTBuilder was detected. The bootstrap snippet is included for copy-pasting into **Extensions → Builder Code Editor**.
   - **`"No se pudo iniciar el bridge HTTP en :54321.\nPuerto bloqueado por otro proceso."`** — the bridge could not bind to port 54321. Another process is using the port.
 </ResponseField>
 
@@ -28,11 +28,22 @@ The MCP server attempts to start the HTTP bridge automatically as an in-process 
 
 The bridge tracks the timestamp of the most recent `GET /next` poll from PTBuilder. A connection is considered active when:
 
-- The bridge HTTP server is responding to `GET /ping` with HTTP 200
-- The `GET /status` endpoint reports `"connected": true`
-- The last poll occurred within the past **5 seconds**
+- The bridge HTTP server is responding to `GET /ping` with HTTP 200 and body `"pong"`
+- The `GET /status` endpoint reports `"connected": true` (last poll was within the past 5 seconds)
+- The `last_poll_ago` field in the `/status` JSON shows the elapsed seconds since the last poll
 
 If PTBuilder stops polling (Packet Tracer closed, webview crashed, bootstrap not running), `connected` flips to `false` and the `_patches_applied` flag resets so the runtime patches are re-injected on the next reconnect.
+
+## Bridge endpoints
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/ping` | GET | Health check — returns `"pong"` with HTTP 200 if the bridge is up |
+| `/status` | GET | Returns `{"connected": bool, "last_poll_ago": float}` — `connected` is true if PT polled within 5 s |
+| `/queue` | POST | Enqueue a JavaScript command for PT to execute on its next poll |
+| `/next` | GET | Called by PTBuilder every 500 ms to pick up the next queued command |
+| `/result` | GET | Long-poll (9 s timeout) — blocks until PT posts a `reportResult()` value |
+| `/result` | POST | Called by PTBuilder's webview to deliver a `reportResult()` value back to Python |
 
 ## When to call `pt_bridge_status`
 

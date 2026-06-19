@@ -1,10 +1,10 @@
 ---
 title: "pt_query_topology: Read Devices from Packet Tracer"
-sidebarTitle: "pt_query_topology"
-description: "pt_query_topology reads the currently loaded devices and their positions from a running Packet Tracer canvas via the HTTP bridge."
+sidebarTitle: "Query Topology"
+description: "pt_query_topology reads the currently loaded devices and their canvas positions from a running Packet Tracer instance via the HTTP bridge."
 ---
 
-`pt_query_topology` sends a `queryTopology()` call to the Packet Tracer Script Engine via the HTTP bridge and returns a structured list of every device currently on the active logical canvas. Each entry includes the device name, type, model, and canvas coordinates. This is the primary way to inspect what is running in Packet Tracer before making modifications with other live tools.
+`pt_query_topology` sends a `queryTopology()` call to the Packet Tracer Script Engine via the HTTP bridge and returns a formatted list of every device currently on the active logical canvas. Each entry includes the device name, type, model, and canvas coordinates. This is the primary way to inspect what is running in Packet Tracer before making modifications with other live tools.
 
 ## Parameters
 
@@ -67,3 +67,7 @@ The tool resolves device types from PT's internal numeric type codes to human-re
 ## Runtime patches dependency
 
 Before executing `queryTopology()`, the tool ensures the runtime patches are injected into PT (idempotent — sent only once per PT session). The patches define `queryTopology` itself as a bridge-aware function that serializes the current device list and posts it back via `reportResult(...)`. If the patches are not applied, `queryTopology` will not be defined in the Script Engine and the call will time out.
+
+## See also
+
+`pt_set_port` is an additional live tool (not shown in the sidebar) that sets low-level port attributes — bandwidth, duplex, description, MAC address, and power state — on an existing device in PT via the bridge. Use `pt_send_raw` with a custom `ipc` call if you need to inspect or set attributes not covered by the standard tools.

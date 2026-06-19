@@ -18,15 +18,14 @@ MCP Packet Tracer generates complete, ready-to-paste IOS routing configurations 
 
 ## Specifying the Protocol
 
-Set `routing` in the `TopologyRequest`. You can also pass `ospf_process_id` (default `1`) and `eigrp_as` (default `100`) for fine-grained control.
+Set `routing` when calling `pt_plan_topology` or `pt_full_build`. You can also pass `ospf_process_id` (default `1`) and `eigrp_as` (default `100`) for fine-grained control.
 
-```json
-{
-  "description": "3 routers, 3 LANs, OSPF",
-  "routers": 3,
-  "routing": "ospf",
-  "ospf_process_id": 1
-}
+```python
+pt_plan_topology(
+    routers=3,
+    routing="ospf",
+    ospf_process_id=1
+)
 ```
 
 ---
@@ -76,13 +75,13 @@ write memory
 
 Floating static routes serve as backup paths. They have an administrative distance of `254` — higher than any dynamic protocol — so they only activate when the primary route disappears.
 
-Enable them by adding `floating_routes: true` to the request:
+Enable them by passing `floating_routes=True` to `pt_plan_topology` or `pt_full_build`:
 
-```json
-{
-  "routing": "static",
-  "floating_routes": true
-}
+```python
+pt_plan_topology(
+    routing="static",
+    floating_routes=True
+)
 ```
 
 The planner finds alternate paths via BFS (blocking the primary next-hop) and generates backup routes like:
@@ -99,7 +98,7 @@ Floating routes are only generated when an alternate physical path exists. In a 
 
 ## OSPF
 
-OSPF is the default protocol for `star` and `three_router_triangle` templates. All networks are placed in **area 0** and a `router-id` is set to the first interface IP of each router for deterministic adjacency.
+OSPF is the default protocol for the `three_router_triangle` template and a popular choice for `star` topologies. All networks are placed in **area 0** and a `router-id` is set to the first interface IP of each router for deterministic adjacency.
 
 ### Generated IOS Commands
 
@@ -126,7 +125,7 @@ The wildcard mask is computed as the bitwise inverse of the subnet mask — for 
 
 ## EIGRP
 
-EIGRP is the default for the `hub_spoke` template. The AS number defaults to `100` and is configurable via `eigrp_as`. `no auto-summary` is always emitted to ensure classless operation.
+EIGRP is a natural fit for the `hub_spoke` template, though you must specify it explicitly (`routing="eigrp"`). The AS number defaults to `100` and is configurable via `eigrp_as`. `no auto-summary` is always emitted to ensure classless operation.
 
 ### Generated IOS Commands
 
@@ -189,13 +188,13 @@ RIP v2 uses classful network statements (no wildcard mask), which differs from O
 | Wildcard mask | — | ✅ | ✅ | ❌ |
 | `no auto-summary` | — | — | ✅ | ✅ |
 | Floating backup | ✅ (AD 254) | — | — | — |
-| Default template | most | `star`, triangle | `hub_spoke` | manual |
+| Default template | most | `three_router_triangle` | — (specify explicitly) | manual |
 
 ## Multi-Hop Static Route Resolution
 
 For topologies with more than 2 routers, static routing uses **Breadth-First Search** over the router adjacency graph to find the correct first-hop neighbor toward each destination LAN. This ensures that R1 in a 4-router chain correctly routes to R4's LAN via R2 as next-hop, not directly to R4.
 
-```
+```text
 R1 ── R2 ── R3 ── R4
 ```
 

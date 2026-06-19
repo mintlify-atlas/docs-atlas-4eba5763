@@ -46,7 +46,9 @@ After export, the project folder contains:
   One IOS CLI configuration file per router and switch in the topology. For a plan with devices R1, R2, SW1, and SW2, the folder will contain `R1_config.txt`, `R2_config.txt`, `SW1_config.txt`, and `SW2_config.txt`. Useful for manual configuration or audit purposes.
 </ResponseField>
 
-Additionally, a `metadata.json` file records the project name, creation timestamp, device count, link count, and validation status.
+<ResponseField name="metadata.json" type="file">
+  Records project metadata: `project_name`, `created_at` (ISO 8601 UTC timestamp), `devices` (count), `links` (count), and `is_valid` (boolean). This file is read by `pt_list_projects` to populate the project list.
+</ResponseField>
 
 ### Output directory structure
 
@@ -74,11 +76,12 @@ projects/
 A plain-text summary listing each written file:
 
 ```
-Files exported to projects/topologia_4routers_ospf:
-  - plan: projects/topologia_4routers_ospf/plan.json
+Archivos exportados en projects/topologia_4routers_ospf:
   - topology_script: projects/topologia_4routers_ospf/topology.js
   - full_script: projects/topologia_4routers_ospf/full_build.js
-  - R-LAN1_config: projects/topologia_4routers_ospf/R-LAN1_config.txt
+  - config_R-LAN1: projects/topologia_4routers_ospf/R-LAN1_config.txt
+  - plan_json: projects/topologia_4routers_ospf/plan.json
+  - metadata: projects/topologia_4routers_ospf/metadata.json
   ...
 ```
 

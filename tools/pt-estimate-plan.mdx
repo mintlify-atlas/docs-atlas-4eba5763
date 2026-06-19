@@ -8,7 +8,7 @@ description: "pt_estimate_plan performs a dry-run from a natural-language reques
 
 ## Parameters
 
-`pt_estimate_plan` accepts the same structural parameters as `pt_plan_topology`. These describe the topology shape; the estimator uses them to compute counts arithmetically rather than building the full model.
+`pt_estimate_plan` accepts 9 topology-shape parameters. Unlike `pt_plan_topology`, it does **not** accept model or template parameters (`router_model`, `switch_model`, `template`, `floating_routes`, `ospf_process_id`, `eigrp_as`) — the estimator computes counts arithmetically and does not build the full model, so those parameters are not relevant here.
 
 <ParamField query="routers" type="integer" default="2">
   Number of routers. Accepts 1 to 20.
