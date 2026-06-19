@@ -1,0 +1,261 @@
+---
+title: "Apply ACLs and NAT to Live Routers via MCP"
+sidebarTitle: "ACL & NAT"
+description: "Use pt_apply_acl and pt_apply_nat to configure access control lists and address translation on live Cisco Packet Tracer routers via the HTTP bridge."
+---
+
+After a topology is deployed into Packet Tracer, you can continue modifying live routers without redeploying the entire topology. The `pt_apply_acl` and `pt_apply_nat` tools send `configureIosDevice` commands through the HTTP bridge at port `54321`, applying access control lists and NAT translations to routers that are already running in the canvas. These tools work independently of `pt_live_deploy` — they can target any existing device by name.
+
+<Warning>
+`pt_apply_acl` and `pt_apply_nat` require the HTTP bridge to be active. Run the PTBuilder bootstrap snippet in Cisco Packet Tracer's Builder Code Editor before calling these tools. Use `pt_bridge_status` to verify connectivity.
+</Warning>
+
+---
+
+## Access Control Lists (ACL)
+
+### ACL Types
+
+MCP Packet Tracer supports all three IOS ACL variants. Choose the type based on how granular your filtering needs to be.
+
+| Type | Number Range | Filters On | When to Use |
+|---|---|---|---|
+| `standard` | 1–99 | Source IP only | Simple traffic blocking by origin subnet or host |
+| `extended` | 100–199 | Source + Destination + Protocol + Ports | Fine-grained rules: block HTTP to a server, permit ICMP only |
+| `named` | Any string | Source + Destination + Protocol + Ports | Human-readable identifiers; easier to edit in IOS |
+
+### Applying an ACL
+
+The `pt_apply_acl` tool accepts an `ACLPlan` describing the router, ACL identifier, type, and a list of entries, plus an optional binding that attaches the ACL to a specific interface and direction.
+
+**Example — extended ACL blocking HTTP from LAN to a server:**
+
+```json
+{
+  "router": "R1",
+  "acl_plan": {
+    "router": "R1",
+    "name_or_number": "101",
+    "acl_type": "extended",
+    "entries": [
+      {
+        "action": "deny",
+        "protocol": "tcp",
+        "source": "192.168.0.0 0.0.0.255",
+        "destination": "host 192.168.1.100",
+        "dest_port_op": "eq",
+        "dest_port": 80
+      },
+      {
+        "action": "permit",
+        "protocol": "ip",
+        "source": "any",
+        "destination": "any"
+      }
+    ]
+  },
+  "binding": {
+    "router": "R1",
+    "interface": "GigabitEthernet0/0",
+    "acl_id": "101",
+    "direction": "in"
+  }
+}
+```
+
+**IOS commands generated and sent to Packet Tracer:**
+
+```text
+enable
+configure terminal
+access-list 101 deny tcp 192.168.0.0 0.0.0.255 host 192.168.1.100 eq 80
+access-list 101 permit ip any any
+interface GigabitEthernet0/0
+ ip access-group 101 in
+ exit
+end
+write memory
+```
+
+### Validation Rules
+
+Before sending any commands, `pt_apply_acl` validates:
+
+- **Number ranges** — standard ACLs must be 1–99, extended must be 100–199
+- **Wildcard masks** — must be valid bitwise inverses of subnet masks
+- **Protocol/port coherence** — port operators (`eq`, `lt`, `gt`, `range`) are only valid for `tcp` and `udp`; ICMP types only apply to `icmp`
+- **Unreachable rules** — entries after an `permit ip any any` or `deny ip any any` that will never match are flagged
+
+### Removing an ACL
+
+`pt_remove_acl` removes the ACL definition and, optionally, its interface binding.
+
+```json
+{
+  "router": "R1",
+  "acl_id": "101",
+  "binding_interface": "GigabitEthernet0/0",
+  "direction": "in"
+}
+```
+
+Generated commands:
+
+```text
+enable
+configure terminal
+interface GigabitEthernet0/0
+ no ip access-group 101 in
+ exit
+no access-list 101
+end
+write memory
+```
+
+---
+
+## NAT and PAT
+
+### NAT Modes
+
+Three NAT modes map directly to the three IOS NAT variants taught in CCNA.
+
+| Mode | Key | When to Use |
+|---|---|---|
+| Static NAT | `static` | Servers that need a fixed public IP (web, FTP, mail) |
+| Dynamic NAT | `dynamic` | Pool of public IPs assigned on demand; rare in modern networks |
+| PAT (overload) | `pat` | Many private IPs share one public IP via port numbers |
+
+### Applying PAT (Most Common)
+
+PAT with `use_interface_overload: true` is the typical home and enterprise scenario — the outside interface's IP is used directly, so no pool is needed.
+
+```json
+{
+  "router": "R1",
+  "nat_config": {
+    "router": "R1",
+    "mode": "pat",
+    "inside_interface": "GigabitEthernet0/0",
+    "outside_interface": "GigabitEthernet0/1",
+    "acl_number": "1",
+    "inside_networks": ["192.168.0.0 0.0.0.255"],
+    "use_interface_overload": true
+  }
+}
+```
+
+**IOS commands generated and sent to Packet Tracer:**
+
+```text
+enable
+configure terminal
+interface GigabitEthernet0/0
+ ip nat inside
+ exit
+interface GigabitEthernet0/1
+ ip nat outside
+ exit
+access-list 1 permit 192.168.0.0 0.0.0.255
+ip nat inside source list 1 interface GigabitEthernet0/1 overload
+end
+write memory
+```
+
+### Applying Static NAT
+
+Static NAT maps individual private IPs to fixed public IPs with a 1:1 relationship.
+
+```json
+{
+  "router": "R1",
+  "nat_config": {
+    "router": "R1",
+    "mode": "static",
+    "inside_interface": "GigabitEthernet0/0",
+    "outside_interface": "GigabitEthernet0/1",
+    "static_mappings": [
+      { "inside_local": "192.168.0.10", "inside_global": "200.1.1.5" }
+    ]
+  }
+}
+```
+
+Generated commands:
+
+```text
+interface GigabitEthernet0/0
+ ip nat inside
+ exit
+interface GigabitEthernet0/1
+ ip nat outside
+ exit
+ip nat inside source static 192.168.0.10 200.1.1.5
+```
+
+### Applying Dynamic NAT (Pool)
+
+Dynamic NAT assigns public IPs from a pool on demand. Requires a `pool` object in the config.
+
+```json
+{
+  "router": "R1",
+  "nat_config": {
+    "router": "R1",
+    "mode": "dynamic",
+    "inside_interface": "GigabitEthernet0/0",
+    "outside_interface": "GigabitEthernet0/1",
+    "acl_number": "1",
+    "inside_networks": ["192.168.0.0 0.0.0.255"],
+    "pool": {
+      "name": "NAT-POOL",
+      "start_ip": "200.1.1.1",
+      "end_ip": "200.1.1.10",
+      "netmask": "255.255.255.0"
+    }
+  }
+}
+```
+
+Generated commands:
+
+```text
+access-list 1 permit 192.168.0.0 0.0.0.255
+ip nat pool NAT-POOL 200.1.1.1 200.1.1.10 netmask 255.255.255.0
+ip nat inside source list 1 pool NAT-POOL
+```
+
+### Removing NAT
+
+`pt_remove_nat` removes all NAT rules, the pool, the ACL, and the inside/outside interface markings.
+
+```json
+{
+  "router": "R1",
+  "mode": "pat",
+  "inside_interface": "GigabitEthernet0/0",
+  "outside_interface": "GigabitEthernet0/1",
+  "acl_number": "1"
+}
+```
+
+Generated commands:
+
+```text
+enable
+configure terminal
+interface GigabitEthernet0/0
+ no ip nat inside
+ exit
+interface GigabitEthernet0/1
+ no ip nat outside
+ exit
+no ip nat inside source list 1 interface GigabitEthernet0/1 overload
+no access-list 1
+end
+write memory
+```
+
+<Tip>
+Use `pt_bridge_status` before calling `pt_apply_acl` or `pt_apply_nat` to confirm the bridge is polling. If the bridge is down, commands are queued but not executed until PTBuilder reconnects.
+</Tip>

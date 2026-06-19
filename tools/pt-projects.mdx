@@ -1,0 +1,172 @@
+---
+title: "pt_export, pt_list_projects, pt_load_project Reference"
+sidebarTitle: "pt_projects"
+description: "Reference for project management tools — export a topology plan to disk, list saved projects, and reload previously generated plans for reuse."
+---
+
+Project management tools let you persist topology plans to disk and reload them later — without re-running the planner. A single `pt_export` call writes four artifact types to a named project folder: the `TopologyPlan` as JSON, a PTBuilder JavaScript scaffold, a full build script that includes IOS config calls, and one IOS CLI config file per device. These files can be committed to version control, shared across machines, or fed back into the pipeline via `pt_load_project` to redeploy a topology, regenerate scripts, or apply post-deploy operations like ACLs and NAT.
+
+---
+
+## pt\_export
+
+Exports a `TopologyPlan` and all derived artifacts to a named project folder on disk.
+
+### Parameters
+
+<ParamField body="plan_json" type="string" required>
+  The full `TopologyPlan` as a JSON string — the output of `pt_plan_topology`, `pt_full_build`, or any other tool that returns a plan. The string is validated against the `TopologyPlan` Pydantic model before writing.
+</ParamField>
+
+<ParamField body="project_name" type="string" default="topology">
+  Name for the project subfolder. Spaces are replaced with underscores. The folder is created under `output_dir` if it does not exist.
+</ParamField>
+
+<ParamField body="output_dir" type="string" default="projects">
+  Base directory for project output. Defaults to `"projects"` relative to the working directory when the MCP server was started. The directory is created recursively if it does not exist.
+</ParamField>
+
+### What gets saved
+
+After export, the project folder contains:
+
+<ResponseField name="plan.json" type="file">
+  The complete `TopologyPlan` serialized as JSON with 2-space indentation. This is the canonical plan file — pass its content to `pt_load_project` or any generation tool.
+</ResponseField>
+
+<ResponseField name="topology.js" type="file">
+  A PTBuilder scaffold script containing `addDevice`, `addModule`, and `addLink` calls. This script creates the physical topology layout in Packet Tracer but does not configure any IOS settings. Paste it into PT's **Extensions → Scripting** dialog.
+</ResponseField>
+
+<ResponseField name="full_build.js" type="file">
+  The complete build script: all PTBuilder layout calls plus all IOS configuration calls (`configureIosDevice`, `configurePcIp`). This is the script that `pt_deploy` and `pt_live_deploy` use.
+</ResponseField>
+
+<ResponseField name="{device}_config.txt" type="file">
+  One IOS CLI configuration file per router and switch in the topology. For a plan with devices R1, R2, SW1, and SW2, the folder will contain `R1_config.txt`, `R2_config.txt`, `SW1_config.txt`, and `SW2_config.txt`. Useful for manual configuration or audit purposes.
+</ResponseField>
+
+Additionally, a `metadata.json` file records the project name, creation timestamp, device count, link count, and validation status.
+
+### Output directory structure
+
+For a four-router OSPF topology exported as `"topologia_4routers_ospf"`:
+
+```
+projects/
+└── topologia_4routers_ospf/
+    ├── plan.json
+    ├── topology.js
+    ├── full_build.js
+    ├── metadata.json
+    ├── R-LAN1_config.txt
+    ├── R-LAN2_config.txt
+    ├── R-LAN3_config.txt
+    ├── R-LAN4_config.txt
+    ├── SW-LAN1_config.txt
+    ├── SW-LAN2_config.txt
+    ├── SW-LAN3_config.txt
+    └── SW-LAN4_config.txt
+```
+
+### Return value
+
+A plain-text summary listing each written file:
+
+```
+Files exported to projects/topologia_4routers_ospf:
+  - plan: projects/topologia_4routers_ospf/plan.json
+  - topology_script: projects/topologia_4routers_ospf/topology.js
+  - full_script: projects/topologia_4routers_ospf/full_build.js
+  - R-LAN1_config: projects/topologia_4routers_ospf/R-LAN1_config.txt
+  ...
+```
+
+---
+
+## pt\_list\_projects
+
+Lists all saved projects in a base directory. Each entry comes from the `metadata.json` file written by `pt_export`.
+
+### Parameters
+
+<ParamField query="output_dir" type="string" default="projects">
+  Base directory to scan for project subdirectories. Must match the `output_dir` used when the projects were created.
+</ParamField>
+
+### Returns
+
+A JSON array of project metadata objects. Each object includes:
+
+<ResponseField name="project_name" type="string">
+  The sanitized project folder name.
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+  ISO 8601 timestamp of when the project was exported.
+</ResponseField>
+
+<ResponseField name="devices" type="integer">
+  Number of devices in the plan.
+</ResponseField>
+
+<ResponseField name="links" type="integer">
+  Number of links in the plan.
+</ResponseField>
+
+<ResponseField name="is_valid" type="boolean">
+  Whether the plan passed validation at export time.
+</ResponseField>
+
+If a project directory exists but has no `metadata.json` (e.g. created outside `pt_export`), only `{"project_name": "..."}` is returned for that entry.
+
+If no projects are found, the tool returns the plain-text message `"No hay proyectos guardados."`.
+
+---
+
+## pt\_load\_project
+
+Loads a saved project and returns its `TopologyPlan` as a JSON string. The returned string can be passed directly to `pt_live_deploy`, `pt_generate_script`, `pt_generate_configs`, `pt_apply_acl`, `pt_apply_nat`, or any other tool that accepts `plan_json`.
+
+### Parameters
+
+<ParamField query="project_name" type="string" required>
+  Name of the project folder to load — the same name used when exporting. Must match an existing subdirectory under `output_dir`.
+</ParamField>
+
+<ParamField query="output_dir" type="string" default="projects">
+  Base directory where the project was saved.
+</ParamField>
+
+### Returns
+
+The full `TopologyPlan` as a formatted JSON string (2-space indentation). If the project does not exist, a `FileNotFoundError` is raised.
+
+### Example workflow
+
+```
+1. pt_plan_topology(routers=3, routing="ospf")
+       → returns plan_json
+
+2. pt_export(plan_json=..., project_name="ospf_lab_v1")
+       → writes to projects/ospf_lab_v1/
+
+3. pt_list_projects()
+       → ["ospf_lab_v1", ...]
+
+4. pt_load_project("ospf_lab_v1")
+       → returns plan_json
+
+5. pt_live_deploy(plan_json=...)
+       → streams topology to Packet Tracer
+```
+
+---
+
+## Use Cases
+
+- **Version control** — export plans after each design iteration and commit the `projects/` folder to Git. Compare `plan.json` diffs to track topology changes over time.
+- **Sharing plans** — send the exported folder to a colleague; they can run `pt_load_project` and redeploy the identical topology on their own Packet Tracer instance.
+- **CI/CD network testing** — load a saved plan in a test pipeline, deploy it to PT, run connectivity checks, and tear it down — all via MCP tools without repeating the planning step.
+- **Post-deploy operations** — export after planning, then load the plan later to apply ACLs or NAT rules to the live topology without regenerating the plan from scratch.
+- **Audit and documentation** — the per-device `_config.txt` files provide a human-readable record of every IOS command applied to every device in the topology.

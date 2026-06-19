@@ -1,0 +1,82 @@
+---
+title: "pt_move_device: Reposition a Device on the Canvas"
+sidebarTitle: "pt_move_device"
+description: "pt_move_device repositions a device to new x,y canvas coordinates in the active Packet Tracer topology via the HTTP bridge."
+---
+
+`pt_move_device` sends a `moveDevice(name, x, y)` call to the Packet Tracer Script Engine via the HTTP bridge, repositioning the named device's icon to the specified canvas coordinates. All cables attached to the device stretch or reroute automatically to follow the new position — no links are dropped. The move is cosmetic only: IP configurations, routing, and interfaces are unaffected.
+
+## Parameters
+
+<ParamField body="device_name" type="string" required>
+  The exact name of the device to move, as it appears in Packet Tracer. Use `pt_query_topology` to list current device names and their current positions before repositioning.
+</ParamField>
+
+<ParamField body="x" type="integer" required>
+  New horizontal position on the logical canvas. The origin `(0, 0)` is the top-left corner of the canvas; `x` increases to the right. Typical usable values range from `50` to `1200` depending on your canvas zoom level.
+</ParamField>
+
+<ParamField body="y" type="integer" required>
+  New vertical position on the logical canvas. `y` increases downward. Typical usable values range from `50` to `900`.
+</ParamField>
+
+## Return value
+
+<ResponseField name="result" type="string">
+  On success: `"Dispositivo '{device_name}' movido a ({x}, {y})."`.
+
+  On failure: `"Error: {reason}"` where reason is the message from PT's Script Engine.
+
+  If PT does not respond within 8 seconds: `"Sin respuesta de PT."`.
+</ResponseField>
+
+## Canvas coordinate system
+
+Packet Tracer's logical workspace uses a top-left origin coordinate system:
+
+```
+(0,0) ────────────────────────────▶  x (increases right)
+  │
+  │     (100,100)  R1
+  │
+  │     (100,300)  SW1
+  │
+  │     (300,300)  SW2
+  │
+  ▼
+  y (increases down)
+```
+
+The auto-placement algorithm in `pt_plan_topology` assigns initial positions based on device role (routers at the top, switches in the middle, PCs at the bottom) and router index. Use `pt_move_device` to reorganize the layout after deployment.
+
+## Use cases
+
+**Organize an auto-placed topology** — `pt_live_deploy` places devices at the coordinates stored in the plan. For large topologies, devices can overlap or be hard to read. Use `pt_move_device` to spread them out into a clear star, ring, or hierarchical layout.
+
+**Align to a diagram** — if you are following a reference network diagram, reposition each device to match the diagram's layout for clarity during labs or presentations.
+
+**Separate overlapping devices** — if `pt_query_topology` shows two devices at the same or very close coordinates, move one to a distinct position.
+
+## Bridge requirement
+
+`pt_move_device` requires the HTTP bridge to be active and PTBuilder to be polling. The call uses a bidirectional round-trip with an 8-second timeout. Call `pt_bridge_status` to verify the connection before using this tool.
+
+## Example
+
+Move `SW1` from its auto-placed position to a central location at `(400, 400)`:
+
+```
+pt_move_device("SW1", 400, 400)
+```
+
+Reposition all PCs in a horizontal row below their switch:
+
+```
+pt_move_device("PC1", 200, 600)
+pt_move_device("PC2", 350, 600)
+pt_move_device("PC3", 500, 600)
+```
+
+<Tip>
+  Query positions first with `pt_query_topology` — the response includes the current `pos=(x,y)` for every device, giving you a baseline for calculating new positions.
+</Tip>

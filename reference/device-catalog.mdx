@@ -1,0 +1,231 @@
+---
+title: "Cisco Packet Tracer Device Catalog (74 Models)"
+sidebarTitle: "Device Catalog"
+description: "Complete reference for all 74 device models available in MCP Packet Tracer, covering routers, switches, end devices, access points, firewalls, and more."
+---
+
+The device catalog is the authoritative list of every hardware model MCP Packet Tracer can place on a Packet Tracer canvas. Each entry records the model's `pt_type` identifier, device category, and the exact port names that PT's Script Engine expects — for example `GigabitEthernet0/0` rather than the shorthand `Gig0/0`. When you submit a topology request the orchestrator resolves every device name or alias against this catalog, selects the right model, and emits `addDevice()` calls using these exact strings. The catalog contains 74 models spanning 34 categories; the default router is the **2911** (3× GigabitEthernet) and the default switch is the **2960-24TT** (24× FastEthernet + 2× GigabitEthernet).
+
+## Routers (15 models)
+
+No router ships with Serial ports by default. Serial WAN links require HWIC or NIM expansion modules installed after device placement.
+
+| Model | Ports | Interface Name Format |
+|-------|-------|-----------------------|
+| `1841` | 2× FastEthernet | Fa0/0, Fa0/1 |
+| `1941` | 2× GigabitEthernet | Gig0/0, Gig0/1 |
+| `2620XM` | 1× FastEthernet | Fa0/0 |
+| `2621XM` | 2× FastEthernet | Fa0/0, Fa0/1 |
+| `2811` | 2× FastEthernet | Fa0/0, Fa0/1 |
+| `2901` | 2× GigabitEthernet | Gig0/0, Gig0/1 |
+| **`2911`** | **3× GigabitEthernet** | **Gig0/0, Gig0/1, Gig0/2 — Default** |
+| `819HG-4G-IOX` | 1× Gig + 1× Fa | Gig0, Fa0 |
+| `819HGW` | 1× Gig + 1× Fa | Gig0, Fa0 |
+| `829` | 2× GigabitEthernet | Gig0, Gig1 |
+| `CGR1240` | 2× GigabitEthernet | Gig0/0, Gig0/1 |
+| `ISR4321` | 2× GigabitEthernet | Gig0/0/0, Gig0/0/1 |
+| `ISR4331` | 3× GigabitEthernet | Gig0/0/0, Gig0/0/1, Gig0/0/2 |
+| `Router-PT` | 2× FastEthernet | Fa0/0, Fa0/1 — Generic |
+| `Router-PT-Empty` | none | No ports (add via modules) |
+
+<Note>
+  The 2911 is the recommended default for most topologies because it provides three GigabitEthernet interfaces natively — one for each adjacent LAN or inter-router link — without requiring modules.
+</Note>
+
+## Switches — Layer 2 (5 models)
+
+| Model | Ports | Notes |
+|-------|-------|-------|
+| `2950-24` | 24× Fa0/1–Fa0/24 | Basic L2 |
+| `2950T-24` | 24× Fa0/1–Fa0/24 + 2× Gig0/1–Gig0/2 | |
+| **`2960-24TT`** | **24× Fa0/1–Fa0/24 + 2× Gig0/1–Gig0/2** | **Default switch** |
+| `Switch-PT` | 8× Fa0/1–Fa0/8 | Generic |
+| `Switch-PT-Empty` | none | No ports (add via modules) |
+
+## Switches — Layer 3 (3 models)
+
+| Model | Ports | Notes |
+|-------|-------|-------|
+| `3560-24PS` | 24× Fa0/1–Fa0/24 + 2× Gig0/1–Gig0/2 | L3 routing capable |
+| `3650-24PS` | 24× Fa0/1–Fa0/24 + 2× Gig0/1–Gig0/2 | L3 routing capable |
+| `IE-2000` | 8× Fa0/1–Fa0/8 + 2× Gig0/1–Gig0/2 | Industrial Ethernet |
+
+## End Devices (12 models)
+
+| Model | Category | Port | Notes |
+|-------|----------|------|-------|
+| `PC-PT` | `pc` | FastEthernet0 | |
+| `Server-PT` | `server` | FastEthernet0 | |
+| `Laptop-PT` | `laptop` | FastEthernet0 | |
+| `TabletPC-PT` | `pc` | FastEthernet0 | |
+| `SMARTPHONE-PT` | `pc` | FastEthernet0 | |
+| `Printer-PT` | `pc` | FastEthernet0 | |
+| `WirelessEndDevice-PT` | `wireless_end_device` | — | Wireless-only end device |
+| `WiredEndDevice-PT` | `wired_end_device` | FastEthernet0 | |
+| `TV-PT` | `tv` | FastEthernet0 | |
+| `Home-VoIP-PT` | `voip` | FastEthernet0 | Home VoIP phone |
+| `Analog-Phone-PT` | `analog_phone` | Phone0 | |
+| `Embedded-Server-PT` | `embedded_server` | FastEthernet0 | |
+
+## Access Points & Wireless (8 models)
+
+| Model | Category | Ports | Notes |
+|-------|----------|-------|-------|
+| `AccessPoint-PT` | `accesspoint` | Port 0 | Standard AP |
+| `AccessPoint-PT-A` | `accesspoint` | Port 0 | 802.11a |
+| `AccessPoint-PT-N` | `accesspoint` | Port 0 | 802.11n |
+| `AccessPoint-PT-AC` | `accesspoint` | Port 0 | 802.11ac |
+| `LAP-PT` | `accesspoint` | Port 0 | Lightweight AP (managed by WLC) |
+| `3702i` | `accesspoint` | GigabitEthernet0 | Cisco 3702i AP |
+| `802` | `accesspoint` | Fa0 | Cisco 802 Wireless Bridge |
+| `803` | `accesspoint` | Fa0 | Cisco 803 Wireless Bridge |
+
+## Security / Firewalls (2 models)
+
+| Model | Category | Ports | Notes |
+|-------|----------|-------|-------|
+| `5505` | `firewall` | 8× Fa0/0–Fa0/7 | Cisco ASA 5505 |
+| `5506-X` | `firewall` | 8× Gig1/0–Gig1/7 | Cisco ASA 5506-X — Default |
+
+## Wireless LAN Controllers (3 models)
+
+| Model | Category | Ports | Notes |
+|-------|----------|-------|-------|
+| `WLC-PT` | `wlc` | Gig1–Gig8 | Generic WLC |
+| `WLC-2504` | `wlc` | Gig1–Gig4 | Cisco WLC 2504 |
+| `WLC-3504` | `wlc` | Gig1–Gig4 | Cisco WLC 3504 |
+
+## Cloud / WAN (2 models)
+
+| Model | Category | Ports | Notes |
+|-------|----------|-------|-------|
+| `Cloud-PT` | `cloud` | Ethernet6 | WAN simulation node |
+| `Cloud-PT-Empty` | `cloud` | none | Empty cloud (add via modules) |
+
+## Network Connectivity (4 models)
+
+| Model | Category | Ports | Notes |
+|-------|----------|-------|-------|
+| `Hub-PT` | `hub` | Port 0–Port 7 (8 ports) | Layer 1 hub |
+| `Bridge-PT` | `bridge` | Port 0, Port 1 | |
+| `Repeater-PT` | `repeater` | Port 0, Port 1 | |
+| `CoAxialSplitter-PT` | `splitter` | Coaxial0–Coaxial3 | 4-port coaxial splitter |
+
+## Modems (2 models)
+
+| Model | Category | Ports | Notes |
+|-------|----------|-------|-------|
+| `DSL-Modem-PT` | `modem` | Ethernet0, Coaxial0 | |
+| `Cable-Modem-PT` | `modem` | Ethernet0, Coaxial0 | |
+
+## Home / Consumer Routers (2 models)
+
+| Model | Category | Ports | Notes |
+|-------|----------|-------|-------|
+| `Linksys-WRT300N` | `wireless_router` | Internet + 4× Ethernet | Linksys WRT300N |
+| `HomeRouter-PT-AC` | `home_gateway` | Internet + 4× Ethernet | Home Router AC |
+
+## IP Phone (1 model)
+
+| Model | Category | Ports | Notes |
+|-------|----------|-------|-------|
+| `7960` | `ip_phone` | Port 0 (switch), PC Port | Cisco IP Phone 7960 |
+
+## Meraki / SDN (2 models)
+
+| Model | Category | Ports | Notes |
+|-------|----------|-------|-------|
+| `Meraki-MX65W` | `meraki` | 12× GigabitEthernet | Meraki MX65W |
+| `Meraki-Server` | `meraki` | Gig0 | Meraki Dashboard Server |
+
+## Network Controllers (2 models)
+
+| Model | Category | Ports | Notes |
+|-------|----------|-------|-------|
+| `NetworkController` | `network_controller` | Gig0 | Generic SDN controller |
+| `DLC100` | `network_controller` | Fa0 | DWDM DLC-100 |
+
+## Telecom / Special (3 models)
+
+| Model | Category | Ports | Notes |
+|-------|----------|-------|-------|
+| `Cell-Tower` | `cell_tower` | Coaxial0 | Cellular tower |
+| `Central-Office-Server` | `central_office` | Ethernet0 | Telco central office |
+| `Sniffer` | `sniffer` | FastEthernet0 | Packet capture |
+
+## Embedded / IoT (3 models)
+
+| Model | Category | Ports | Notes |
+|-------|----------|-------|-------|
+| `MCU-PT` | `mcu` | — | Microcontroller (no fixed ports) |
+| `SBC-PT` | `sbc` | FastEthernet0 | Single Board Computer |
+| `Thing` | `iot` | — | Generic IoT device (represents ~80 IoT types) |
+
+## Physical Infrastructure (5 models)
+
+| Model | Category | Ports | Notes |
+|-------|----------|-------|-------|
+| `Copper Patch Panel` | `patch_panel` | 24× FastEthernet | |
+| `Fiber Patch Panel` | `patch_panel` | 24× Fiber | |
+| `Copper Wall Mount` | `wall_mount` | Fa0, Fa1 | |
+| `Fiber Wall Mount` | `wall_mount` | Fiber0, Fiber1 | |
+| `Power Distribution Device` | `power_dist` | — | |
+
+---
+
+## Device Aliases
+
+The server ships 101 aliases that let LLMs (and humans) use plain English names instead of Cisco model numbers. Aliases are case-insensitive and resolved before any catalog lookup.
+
+| Alias | Resolves to | Alias | Resolves to |
+|-------|-------------|-------|-------------|
+| `router` | `2911` | `switch` | `2960-24TT` |
+| `pc`, `computer` | `PC-PT` | `server` | `Server-PT` |
+| `laptop` | `Laptop-PT` | `tablet` | `TabletPC-PT` |
+| `smartphone`, `phone` | `SMARTPHONE-PT` | `printer` | `Printer-PT` |
+| `cloud`, `wan` | `Cloud-PT` | `ap`, `wifi`, `access_point` | `AccessPoint-PT` |
+| `hub` | `Hub-PT` | `firewall`, `asa` | `5506-X` |
+| `wlc`, `wireless_controller` | `WLC-PT` | `lap`, `lightweight_ap` | `LAP-PT` |
+| `dsl`, `modem` | `DSL-Modem-PT` | `cable_modem` | `Cable-Modem-PT` |
+| `1841`, `1941`, `2811` | (direct) | `2901`, `2911` | (direct) |
+| `4321`, `isr4321` | `ISR4321` | `4331`, `isr4331` | `ISR4331` |
+| `2950` | `2950-24` | `2960` | `2960-24TT` |
+| `3560` | `3560-24PS` | `3650` | `3650-24PS` |
+| `ie2000`, `ie-2000` | `IE-2000` | `switch_empty` | `Switch-PT-Empty` |
+| `5505` | `5505` | `5506`, `5506x` | `5506-X` |
+| `ip_phone`, `7960`, `cisco_phone` | `7960` | `meraki`, `meraki_mx65w` | `Meraki-MX65W` |
+| `bridge` | `Bridge-PT` | `repeater` | `Repeater-PT` |
+| `splitter`, `coaxial_splitter` | `CoAxialSplitter-PT` | `sniffer` | `Sniffer` |
+| `mcu`, `microcontroller` | `MCU-PT` | `sbc`, `raspberry`, `single_board` | `SBC-PT` |
+| `iot`, `thing`, `sensor` | `Thing` | `meraki_server` | `Meraki-Server` |
+| `network_controller`, `controller` | `NetworkController` | `linksys`, `wrt300n` | `Linksys-WRT300N` |
+| `home_router`, `home_gateway` | `HomeRouter-PT-AC` | `tv` | `TV-PT` |
+| `voip`, `home_voip` | `Home-VoIP-PT` | `analog_phone` | `Analog-Phone-PT` |
+| `patch_panel`, `copper_patch` | `Copper Patch Panel` | `fiber_patch` | `Fiber Patch Panel` |
+| `wall_mount`, `copper_wall` | `Copper Wall Mount` | `fiber_wall` | `Fiber Wall Mount` |
+| `cell_tower` | `Cell-Tower` | `dwdm`, `dlc100` | `DLC100` |
+| `cloud_empty` | `Cloud-PT-Empty` | `router_empty` | `Router-PT-Empty` |
+| `ap_a` | `AccessPoint-PT-A` | `ap_n` | `AccessPoint-PT-N` |
+| `ap_ac` | `AccessPoint-PT-AC` | `3702i` | `3702i` |
+| `wireless_device` | `WirelessEndDevice-PT` | `wired_device` | `WiredEndDevice-PT` |
+| `embedded_server` | `Embedded-Server-PT` | `power_dist` | `Power Distribution Device` |
+| `central_office` | `Central-Office-Server` | `802`, `803` | (direct wireless bridges) |
+
+The complete 101-entry mapping is defined in `infrastructure/catalog/aliases.py`.
+
+---
+
+## Querying the Catalog with MCP Tools
+
+Two tools let you inspect the catalog at runtime without leaving your LLM client:
+
+<CardGroup cols={2}>
+  <Card title="pt_list_devices" icon="list">
+    Returns all 74 models with their port specs and categories. Useful when you want to browse what's available or pick a model by port count.
+  </Card>
+  <Card title="pt_get_device_details" icon="magnifying-glass">
+    Returns the full port list, category, and display name for a single model. Accepts both the exact `pt_type` string and any alias (e.g. `"router"` resolves to the full 2911 spec).
+  </Card>
+</CardGroup>
+
+The same data is also available as a read-only MCP resource at `pt://catalog/devices` — see [MCP Resources](/reference/mcp-resources) for details.

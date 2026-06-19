@@ -1,72 +1,126 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mintlify Starter Kit",
+  "name": "MCP Packet Tracer",
+  "theme": "luma",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#26bfc0",
+    "light": "#0c1d2d",
+    "dark": "#d2d5d8"
   },
-  "favicon": "/favicon.svg",
-  "navigation": {
-    "pages": [
-      {
-        "group": "Getting Started",
-        "pages": [
-          "index",
-          "quickstart"
-        ]
-      }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
+  "favicon": "https://icons.duckduckgo.com/ip3/mcpnetwork.top.ico",
   "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
     "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://app.mintlify.com"
+      "type": "github",
+      "href": "https://github.com/Mats2208/MCP-Packet-Tracer"
     }
-  },
-  "contextual": {
-    "options": [
-      "copy",
-      "view",
-      "chatgpt",
-      "claude",
-      "perplexity",
-      "mcp",
-      "cursor",
-      "vscode"
-    ]
   },
   "footer": {
     "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
+      "github": "https://github.com/Mats2208/MCP-Packet-Tracer"
     }
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "how-it-works"
+            ]
+          },
+          {
+            "group": "Setup & Configuration",
+            "pages": [
+              "setup/client-setup",
+              "setup/live-deploy",
+              "setup/transport-modes"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/planning-topologies",
+              "guides/routing-protocols",
+              "guides/acl-and-nat",
+              "guides/expansion-modules",
+              "guides/ip-addressing",
+              "guides/exporting-projects"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "reference/device-catalog",
+              "reference/cable-types",
+              "reference/topology-templates",
+              "reference/mcp-resources",
+              "reference/architecture"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "MCP Tools",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "tools/overview"
+            ]
+          },
+          {
+            "group": "Planning & Validation",
+            "pages": [
+              "tools/pt-plan-topology",
+              "tools/pt-validate-plan",
+              "tools/pt-fix-plan",
+              "tools/pt-explain-plan",
+              "tools/pt-estimate-plan",
+              "tools/pt-full-build"
+            ]
+          },
+          {
+            "group": "Generation & Deploy",
+            "pages": [
+              "tools/pt-generate-script",
+              "tools/pt-generate-configs",
+              "tools/pt-deploy",
+              "tools/pt-live-deploy",
+              "tools/pt-bridge-status"
+            ]
+          },
+          {
+            "group": "Topology Interaction",
+            "pages": [
+              "tools/pt-query-topology",
+              "tools/pt-delete-device",
+              "tools/pt-rename-device",
+              "tools/pt-move-device",
+              "tools/pt-delete-link",
+              "tools/pt-send-raw"
+            ]
+          },
+          {
+            "group": "Modules, ACL & NAT",
+            "pages": [
+              "tools/pt-modules",
+              "tools/pt-acl",
+              "tools/pt-nat"
+            ]
+          },
+          {
+            "group": "Catalog & Projects",
+            "pages": [
+              "tools/pt-catalog",
+              "tools/pt-projects"
+            ]
+          }
+        ]
+      }
+    ]
   }
 }

@@ -1,0 +1,85 @@
+---
+title: "pt_live_deploy: Stream Commands to Packet Tracer"
+sidebarTitle: "pt_live_deploy"
+description: "pt_live_deploy sends the full PTBuilder script to a running Packet Tracer instance via the HTTP bridge on port 54321 — no copy-paste required."
+---
+
+`pt_live_deploy` is the real-time deployment path. It converts a `TopologyPlan` into executable JavaScript commands — device placements, module installs, cable connections, IOS configurations, and PC IP assignments — and streams each command to a running Cisco Packet Tracer instance through the HTTP bridge at `http://127.0.0.1:54321`. PTBuilder's webview polls the bridge every 500 ms and executes each command in Packet Tracer's Script Engine via `$se('runCode', ...)`. The result is a fully built and configured topology appearing directly in Packet Tracer with no manual copy-pasting.
+
+## Parameters
+
+<ParamField body="plan_json" type="string" required>
+  The `TopologyPlan` JSON produced by `pt_plan_topology` or `pt_full_build`. Must contain at least one device.
+</ParamField>
+
+<ParamField body="command_delay" type="number" default="1.0">
+  Delay in seconds between consecutive commands sent to the bridge. Values below `1.0` are automatically clamped to `1.0`. A delay shorter than one second may cause `configureIosDevice` or `configurePcIp` to run before a device finishes initializing, which triggers error popups in Packet Tracer and can kill the bootstrap polling loop.
+</ParamField>
+
+## Return value
+
+<ResponseField name="result" type="string">
+  A summary string reporting the number of commands sent, the number of devices, and the number of links in the deployed topology. Example: `"Topologia desplegada en Packet Tracer!\n  Comandos enviados: 21\n  Dispositivos: 8\n  Enlaces: 7"`.
+</ResponseField>
+
+## Prerequisites
+
+Before calling `pt_live_deploy`, the HTTP bridge must be active and PTBuilder must be polling it. The MCP server starts the bridge automatically as an in-process thread when it registers tools — you do **not** need to run `start_bridge.ps1` or any external process. You only need to paste the bootstrap snippet once per Packet Tracer session.
+
+**Bootstrap snippet** (paste into Extensions → Builder Code Editor, then click Run):
+
+```javascript
+/* PT-MCP Bridge */ window.webview.evaluateJavaScriptAsync("setInterval(function(){var x=new XMLHttpRequest();x.open('GET','http://127.0.0.1:54321/next',true);x.onload=function(){if(x.status===200&&x.responseText){$se('runCode',x.responseText)}};x.onerror=function(){};x.send()},500)");
+```
+
+This injects a `setInterval` into the PTBuilder webview (a Chromium QWebEngine context that has full `XMLHttpRequest` support). Every 500 ms the webview fetches `/next` from the bridge; when a command is queued, it calls `$se('runCode', cmd)` to execute it in Packet Tracer's Script Engine.
+
+<Warning>
+  The HTTP bridge must be active and PTBuilder must be polling before you call `pt_live_deploy`. If the bridge is up but PT is not connected, the tool returns the bootstrap snippet with instructions rather than deploying. Call `pt_bridge_status` first to confirm the connection is ready.
+</Warning>
+
+## What happens during deployment
+
+The executor breaks the full topology script into individual lines and sends them one at a time to `POST /queue` on the bridge. PTBuilder picks each command up on its next 500 ms poll and runs it in the Script Engine. The sequence is:
+
+1. **Runtime patches** are injected first (idempotent, once per PT session) — these override `addModule`, `configureIosDevice`, `configurePcIp`, and `lwAddDevice`/`lwAddLink` with defensive versions that prevent crashes on host devices
+2. **`lwAddDevice`** calls place each device on the logical canvas
+3. **`addModule`** calls install expansion modules (e.g. `HWIC-2T` for serial ports)
+4. **`lwAddLink`** calls draw cables between interfaces
+5. **`configureIosDevice`** calls push the full IOS CLI config to each router and switch
+6. **`configurePcIp`** calls set static IPs or enable DHCP on PC-PT, Laptop-PT, and Server-PT devices
+
+Each command is separated by `command_delay` seconds to give Packet Tracer time to finish processing before the next command arrives.
+
+## Bridge architecture
+
+```
+MCP Server (:39000)
+    │  POST /queue  (one JS command at a time)
+    ▼
+HTTP Bridge (:54321)
+    │  GET /next every 500 ms
+    ▼
+PTBuilder WebView (Chromium / QWebEngine)
+    │  $se('runCode', cmd)
+    ▼
+Packet Tracer Script Engine
+    │  executes addDevice, addLink, configureIosDevice, ...
+    ▼
+Packet Tracer Canvas
+```
+
+## Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---------|-------------|-----|
+| "Bridge activo pero PT NO está conectado" | Bootstrap not pasted or PT was restarted | Paste bootstrap in Builder Code Editor → Run |
+| Devices appear but configs not applied | `command_delay` too low | Increase to `2.0` or higher |
+| Nothing appears in PT | Bridge not running on `:54321` | Check `pt_bridge_status` |
+| Error popups in PT | `configureIosDevice` ran before device booted | Increase `command_delay` |
+
+For full bridge setup instructions, see [Live Deploy Setup](/setup/live-deploy).
+
+<Tip>
+  For topologies with many devices or slow hardware, set `command_delay` to `2.0` to give Packet Tracer extra time to initialize each device before the next command arrives.
+</Tip>

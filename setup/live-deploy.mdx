@@ -1,0 +1,88 @@
+---
+title: "Set Up Live Deploy to Cisco Packet Tracer"
+sidebarTitle: "Live Deploy"
+description: "Configure the HTTP bridge that streams MCP tool commands directly into a running Cisco Packet Tracer instance — no manual copy-paste required."
+---
+
+Live Deploy is the feature that makes MCP Packet Tracer feel truly real-time: instead of generating a JavaScript script and asking you to paste it manually, the MCP server queues each PTBuilder command over a local HTTP bridge that a small polling loop — injected once into Packet Tracer's Builder Code Editor — picks up and executes directly in PT's Script Engine. The result is a seamless pipeline from a natural-language prompt to a fully-configured, running topology in Cisco Packet Tracer.
+
+<Warning>
+  Live Deploy requires **Cisco Packet Tracer 8.2 or later** with the built-in **PTBuilder** extension. PTBuilder ships with PT 8.2+ and does not require a separate installation, but it must be enabled via **Extensions → Builder Code Editor** inside Packet Tracer.
+</Warning>
+
+## Bridge Architecture
+
+The live deploy pipeline flows through four components:
+
+```
+┌──────────┐  MCP   ┌──────────────────┐  HTTP   ┌─────────────────┐  $se()  ┌──────────────┐
+│   LLM    │ ─────▶ │  MCP Server      │ ──────▶ │  PTBuilder      │ ──────▶ │ Packet Tracer│
+│ Copilot  │        │  :39000          │ :54321  │  (WebView)      │  IPC    │  (Engine)    │
+└──────────┘        └──────────────────┘         └─────────────────┘         └──────────────┘
+```
+
+| Port | Service | Purpose |
+|------|---------|---------| 
+| **39000** | MCP server (streamable-HTTP) | Receives tool calls from the LLM or editor extension |
+| **54321** | HTTP bridge (`PTCommandBridge`) | Queues JavaScript commands for PTBuilder to pick up and execute in PT |
+
+The MCP server starts the `PTCommandBridge` HTTP server on port `54321` automatically — whether you use stdio or streamable-HTTP transport. You never need to start it separately.
+
+## Setup (Once Per PT Session)
+
+The bootstrap step injects a polling loop into PTBuilder's Chromium-based webview. You only need to do this once each time you open a new Packet Tracer session.
+
+<Steps>
+  <Step title="Open Cisco Packet Tracer 8.2+">
+    Launch Packet Tracer and open (or create) the topology file you want to work with. The bridge connects to the **currently running PT instance** on your machine.
+  </Step>
+
+  <Step title="Open the Builder Code Editor">
+    In the Packet Tracer menu bar, navigate to:
+
+    **Extensions → Builder Code Editor**
+
+    A code editor panel will appear. This is PTBuilder's Script Engine interface — it can run JavaScript that controls the PT canvas directly.
+  </Step>
+
+  <Step title="Paste the bootstrap snippet and click Run">
+    Paste the following script into the Builder Code Editor and click **Run**:
+
+    ```javascript
+    /* PT-MCP Bridge */ window.webview.evaluateJavaScriptAsync("setInterval(function(){var x=new XMLHttpRequest();x.open('GET','http://127.0.0.1:54321/next',true);x.onload=function(){if(x.status===200&&x.responseText){$se('runCode',x.responseText)}};x.onerror=function(){};x.send()},500)");
+    ```
+
+    You should see no error popup — a successful run is silent. The bridge is now active.
+  </Step>
+</Steps>
+
+## How the Bridge Works
+
+The bootstrap snippet uses a two-layer execution model to work around PTBuilder's architecture:
+
+1. **Outer layer (Script Engine):** The `window.webview.evaluateJavaScriptAsync(...)` call runs in PT's Script Engine. Its sole job is to inject the inner polling loop into the PTBuilder **webview** (a Chromium/QWebEngine context).
+
+2. **Inner layer (Webview — Chromium):** Once injected, `setInterval` runs every **500 ms** inside the webview. On each tick it issues an `XMLHttpRequest` GET to `http://127.0.0.1:54321/next`. If the MCP server has queued a command, the bridge returns it as the response body; the webview then calls `$se('runCode', responseText)` to execute that JavaScript in PT's Script Engine.
+
+This separation is necessary because `XMLHttpRequest` is only available in the Chromium webview context, not directly in PT's Script Engine. The MCP server's `pt_live_deploy` and `pt_send_raw` tools queue commands via HTTP POST to the same bridge, and they are delivered to PT within the next 500 ms poll cycle.
+
+**Checking bridge status from your AI client:**
+
+```
+pt_bridge_status
+```
+
+This tool returns whether PTBuilder is actively polling (last poll within 5 seconds) and when the last poll occurred.
+
+## Technical Note: Block Comments vs. Line Comments
+
+PTBuilder's `executeCode()` method strips all newlines from the script before passing it to the Script Engine (`code.replace(/\n/g, "")`). This means:
+
+- **Line comments (`//`)** are safe in multi-line source but become dangerous after newline-stripping — everything after `//` on a logical line gets concatenated with the next line and can corrupt subsequent statements.
+- **Block comments (`/* */`)** survive newline-stripping safely, which is why the bootstrap snippet uses `/* PT-MCP Bridge */` rather than a `//` comment.
+
+When writing raw JavaScript with `pt_send_raw`, always use block comments or no comments at all, and send the code as a **single line** to avoid any line-number ambiguity in Script Engine error messages.
+
+<Note>
+  All 33 MCP tools work even without the live deploy bridge. You can plan topologies, validate them, generate PTBuilder JavaScript scripts and IOS CLI configs, and export everything to disk — all without Packet Tracer open. Live Deploy is an optional enhancement for real-time, zero-copy-paste deployment.
+</Note>

@@ -1,20 +1,90 @@
 ---
-title: "Introduction"
-description: "Welcome to your project"
+title: "MCP Packet Tracer: AI-Powered Cisco Network Automation"
+sidebarTitle: "Home"
+description: "MCP Packet Tracer is an MCP server that gives any LLM full control over Cisco Packet Tracer — plan, validate, generate, and deploy topologies from natural language."
 ---
 
-Write a short description of your product here. What it does, who it's for, and what they can accomplish with it.
+MCP Packet Tracer is a [Model Context Protocol](https://modelcontextprotocol.io) server that bridges any LLM — GitHub Copilot, Claude, Codex, Cursor — to Cisco Packet Tracer. Describe a network in plain English and the server plans, validates, generates IOS configs, and deploys the topology directly into a running Packet Tracer instance in real time.
 
-<Tip>
-  Ready to make this your own? Start by editing this page. Update your `docs.json` file to customize your site. Then fill out the [Quickstart](/quickstart) page.
-</Tip>
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Install the server and build your first topology in under five minutes.
+  </Card>
+  <Card title="How It Works" icon="diagram-project" href="/how-it-works">
+    Understand the planning, validation, and live-deploy pipeline.
+  </Card>
+  <Card title="MCP Tools Reference" icon="wrench" href="/tools/overview">
+    Browse all 33 MCP tools across planning, generation, and topology interaction.
+  </Card>
+  <Card title="Live Deploy Setup" icon="bolt" href="/setup/live-deploy">
+    Configure the HTTP bridge to stream commands directly into Packet Tracer.
+  </Card>
+</CardGroup>
 
-<Card title="Quickstart" icon="rocket" href="/quickstart">
-  This card links to the quickstart page in your project.
-</Card>
-<Card title="Components" icon="puzzle-piece" href="https://mintlify.com/docs/components">
-  Add cards, callouts, steps, tabs, and more to design and structure your pages.
-</Card>
-<Card title="Settings" icon="gear" href="https://mintlify.com/docs/organize/settings">
-  Set your site name, branding, and navigation in the `docs.json` file.
-</Card>
+## What You Can Do
+
+MCP Packet Tracer covers the complete network automation workflow — from a single natural-language prompt to a fully configured, running topology.
+
+<CardGroup cols={3}>
+  <Card title="Plan Topologies" icon="network-wired" href="/guides/planning-topologies">
+    Generate complete `TopologyPlan` objects with automatic IP addressing, DHCP pools, and routing from a prompt.
+  </Card>
+  <Card title="Routing Protocols" icon="route" href="/guides/routing-protocols">
+    Full IOS command generation for Static, OSPF, EIGRP, and RIP v2.
+  </Card>
+  <Card title="ACL & NAT" icon="shield-halved" href="/guides/acl-and-nat">
+    Apply standard, extended, and named ACLs plus Static NAT, Dynamic NAT, and PAT to live routers.
+  </Card>
+  <Card title="Expansion Modules" icon="microchip" href="/guides/expansion-modules">
+    Hot-install HWIC, NIM, NM, and WIC modules on routers already placed in the canvas.
+  </Card>
+  <Card title="Device Catalog" icon="server" href="/reference/device-catalog">
+    74 device models, 151 expansion modules, and 15 cable types across 34 categories.
+  </Card>
+  <Card title="Client Setup" icon="plug" href="/setup/client-setup">
+    Connect Claude Code, Claude Desktop, VS Code Copilot, Cursor, or any MCP client.
+  </Card>
+</CardGroup>
+
+## At a Glance
+
+| Capability | Details |
+|---|---|
+| **MCP Tools** | 33 tools — planning, validation, generation, deploy, ACL, NAT, modules |
+| **MCP Resources** | 5 read-only catalog resources (`pt://catalog/…`) |
+| **Device Models** | 74 models across 34 categories |
+| **Expansion Modules** | 151 modules (HWIC, NIM, NM, WIC, SFP, and more) |
+| **Cable Types** | 15 cable types with automatic inference |
+| **Routing Protocols** | Static, OSPF, EIGRP, RIP v2 |
+| **Transport** | stdio (desktop clients) or streamable-HTTP on `:39000` |
+| **Live Deploy** | Real-time HTTP bridge on `:54321` — no copy-paste |
+
+## Get Started in 3 Steps
+
+<Steps>
+  <Step title="Install the server">
+    Clone the repo and install it as an editable Python package:
+    ```bash
+    git clone https://github.com/Mats2208/MCP-Packet-Tracer
+    cd MCP-Packet-Tracer
+    pip install -e .
+    ```
+  </Step>
+  <Step title="Connect your MCP client">
+    Register the server with your preferred AI client. For Claude Code:
+    ```bash
+    claude mcp add --scope user --transport stdio packet-tracer -- python -m packet_tracer_mcp --stdio
+    ```
+    See [Client Setup](/setup/client-setup) for VS Code, Cursor, Claude Desktop, and Codex CLI.
+  </Step>
+  <Step title="Ask your LLM to build a network">
+    ```
+    "Create a network with 3 routers, OSPF routing, DHCP on each LAN, and 2 PCs per router"
+    ```
+    The server plans → validates → generates → deploys the topology automatically.
+  </Step>
+</Steps>
+
+<Note>
+  Live deploy into a running Packet Tracer instance requires a one-time bridge setup. See [Live Deploy Setup](/setup/live-deploy) for the bootstrap snippet. The MCP tools work without the bridge too — you can plan, generate scripts, and export configs to disk.
+</Note>

@@ -1,0 +1,162 @@
+---
+title: "MCP Resources: Read-Only Catalog Access"
+sidebarTitle: "MCP Resources"
+description: "Reference for the 5 read-only MCP resources exposed at pt://catalog/* URIs — devices, cables, aliases, templates, and server capabilities."
+---
+
+MCP resources are a distinct concept from MCP tools. While tools perform actions and return results on demand, resources are addressable read-only endpoints that MCP clients can inspect, cache, and poll. MCP Packet Tracer exposes five resources — all prefixed with `pt://` — that give any connected client instant access to the full device catalog, cable inference rules, model aliases, topology templates, and server capabilities without consuming a tool call. Clients that support MCP resource subscriptions can watch these endpoints for changes; all five are static between server restarts so they change only on server upgrades.
+
+<Note>
+  Resources are read-only. All topology modifications — placing devices, drawing cables, configuring IOS — happen exclusively through MCP tools such as `pt_plan_topology`, `pt_live_deploy`, and `pt_apply_acl`.
+</Note>
+
+## Resources at a Glance
+
+| URI | Description | Returns |
+|-----|-------------|---------|
+| `pt://catalog/devices` | All 74 device models with ports and categories | JSON object keyed by `pt_type` |
+| `pt://catalog/cables` | Cable types supported by the plan generator | JSON object keyed by cable name |
+| `pt://catalog/aliases` | 101 model name aliases | JSON object mapping alias → `pt_type` |
+| `pt://catalog/templates` | 9 topology templates with metadata | JSON array of template objects |
+| `pt://capabilities` | Server version and supported features | JSON object |
+
+## Resource Reference
+
+### `pt://catalog/devices`
+
+Returns a JSON object where each key is a `pt_type` string (e.g. `"2911"`, `"PC-PT"`) and each value contains:
+
+```json
+{
+  "2911": {
+    "display_name": "Cisco 2911",
+    "category": "router",
+    "ports": ["GigabitEthernet0/0", "GigabitEthernet0/1", "GigabitEthernet0/2"]
+  },
+  "2960-24TT": {
+    "display_name": "Cisco 2960-24TT",
+    "category": "switch",
+    "ports": ["FastEthernet0/1", "FastEthernet0/2", "...24 total...", "GigabitEthernet0/1", "GigabitEthernet0/2"]
+  }
+}
+```
+
+74 entries total. Port names are the exact strings passed to `addLink()` in the PT Script Engine.
+
+### `pt://catalog/cables`
+
+Returns a JSON object mapping cable key to display name for the 15 cable types the server recognises:
+
+```json
+{
+  "straight":  "Copper Straight-Through",
+  "cross":     "Copper Cross-Over",
+  "serial":    "Serial DCE",
+  "fiber":     "Fiber",
+  "console":   "Console",
+  "phone":     "Phone",
+  "coaxial":   "Coaxial",
+  "auto":      "Automatic",
+  "wireless":  "Wireless",
+  "roll":      "Rollover (Console)",
+  "cable":     "Cable",
+  "octal":     "Octal",
+  "cellular":  "Cellular",
+  "usb":       "USB",
+  "custom_io": "Custom IoT I/O"
+}
+```
+
+### `pt://catalog/aliases`
+
+Returns a JSON object of all 101 aliases. Example entries:
+
+```json
+{
+  "router":       "2911",
+  "switch":       "2960-24TT",
+  "pc":           "PC-PT",
+  "firewall":     "5506-X",
+  "ap":           "AccessPoint-PT",
+  "4321":         "ISR4321",
+  "raspberry":    "SBC-PT",
+  "iot":          "Thing"
+}
+```
+
+Aliases are lowercase; the server normalises input before lookup so `"Router"`, `"ROUTER"`, and `"router"` all resolve to `"2911"`.
+
+### `pt://catalog/templates`
+
+Returns a JSON array of template objects. Each object contains:
+
+```json
+[
+  {
+    "name": "Single LAN",
+    "key": "single_lan",
+    "description": "1 router + 1 switch + PCs. Red local simple.",
+    "routers": "1-1",
+    "default_routing": "static",
+    "tags": ["básico", "lan", "principiante"]
+  },
+  {
+    "name": "Hub and Spoke",
+    "key": "hub_spoke",
+    "description": "1 router hub central + N routers spoke, cada uno con su LAN.",
+    "routers": "1-20",
+    "default_routing": "eigrp",
+    "tags": ["avanzado", "wan", "hub-spoke"]
+  }
+]
+```
+
+9 entries total — one per `TopologyTemplate` enum value.
+
+### `pt://capabilities`
+
+Returns the server's version and feature flags. This is the canonical way for a client or LLM to discover what the server supports without reading documentation.
+
+```json
+{
+  "version": "0.4.0",
+  "routing": [
+    "static",
+    "static_floating",
+    "ospf",
+    "eigrp",
+    "rip",
+    "none"
+  ],
+  "features": [
+    "dhcp",
+    "wan",
+    "switching",
+    "auto_fix",
+    "explain",
+    "dry_run",
+    "floating_routes",
+    "ospf_multi_process",
+    "eigrp_as_config",
+    "acl_standard",
+    "acl_extended",
+    "acl_apply_via_bridge"
+  ],
+  "unsupported": ["nat", "vlan", "stp"],
+  "max_routers": 20,
+  "max_pcs_per_lan": 24,
+  "max_switches_per_router": 4
+}
+```
+
+The `unsupported` array lists features that are not yet implemented in the current version. Clients and LLMs should check this list before attempting to plan topologies that require those features.
+
+## How MCP Clients Access Resources
+
+The behaviour depends on the client:
+
+- **Claude Desktop / Claude Code** — resources are listed in the MCP panel and fetched on demand when the LLM needs catalog data.
+- **VS Code (Copilot / Cline)** — resources appear in the MCP server inspector; the LLM can read them via tool context injection.
+- **Programmatic clients** — call `client.read_resource("pt://catalog/devices")` (or the equivalent SDK method) to fetch the JSON string directly.
+
+Most clients load resources lazily (only when referenced) rather than polling continuously, since all five catalog resources are static for the lifetime of the server process.

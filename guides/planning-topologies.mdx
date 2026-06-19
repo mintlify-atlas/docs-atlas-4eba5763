@@ -1,0 +1,162 @@
+---
+title: "Plan Network Topologies from Natural Language"
+sidebarTitle: "Planning Topologies"
+description: "Use pt_plan_topology and pt_full_build to generate complete, validated Cisco network topologies from a plain-language description."
+---
+
+Topology planning in MCP Packet Tracer is the process of translating a plain-English prompt — such as _"create a network with 3 routers, OSPF, and DHCP"_ — into a fully validated `TopologyPlan` object containing every device, cable, IP address, DHCP pool, routing config, and expansion module required to deploy the network. The planning engine handles subnet allocation, cable inference, port assignment, and protocol configuration automatically, so neither the LLM nor the user needs to think about any of those details.
+
+## How Planning Works
+
+Every topology starts as a `TopologyRequest` and ends as a `TopologyPlan`. The orchestrator pipeline looks like this:
+
+```
+TopologyRequest
+      │
+  Orchestrator ─── IPPlanner (assigns /24 LANs + /30 inter-router WAN links)
+      │
+  Validator    ─── 24 typed error codes, port/cable/IP checks
+      │
+  AutoFixer    ─── fixes wrong cables, upgrades routers, reassigns ports
+      │
+  TopologyPlan (validated, fully addressed)
+```
+
+The `TopologyPlan` that comes back contains:
+
+- **Devices** — model, category, canvas coordinates, and role for every node
+- **Links** — inferred or explicit cable types between every pair of devices
+- **IP addressing** — fully assigned interface IPs on every router, PC, and server
+- **DHCP pools** — one pool per LAN with gateway excluded
+- **Static routes / OSPF / EIGRP / RIP config** — complete IOS command blocks per router
+- **Expansion modules** — `HWIC-2T` or `NIM-2T` entries when serial links are needed
+
+## Topology Templates
+
+Templates are hints that guide the orchestrator's topology-building logic. Each template sets sensible defaults for router count, PC distribution, switches, and routing protocol.
+
+| Template | Description | Default Routing |
+|---|---|---|
+| `single_lan` | 1 router + 1 switch + N PCs — simplest local network | `static` |
+| `multi_lan` | N routers in a chain, each with their own LAN | `static` |
+| `multi_lan_wan` | Multi-LAN topology with a WAN Cloud node attached | `static` |
+| `star` | 1 central router connected to N switches (hub-and-spoke variant) | `ospf` |
+| `hub_spoke` | 1 hub router + N spoke routers, each spoke with its own LAN | `eigrp` |
+| `branch_office` | Headquarters + branch sites connected through a WAN cloud | `static` |
+| `router_on_a_stick` | 1 router + 1 switch for inter-VLAN routing via subinterfaces | `static` |
+| `three_router_triangle` | 3 routers in a triangle with route redundancy | `ospf` |
+| `custom` | Free-form — all parameters are set manually, no enforced structure | `none` |
+
+<Note>
+Template selection is a hint, not a hard constraint. You can override any default by specifying fields explicitly in the request — for example, setting `routing: "ospf"` on a `single_lan` template.
+</Note>
+
+## `pt_full_build` vs `pt_plan_topology`
+
+Both tools plan a topology, but they serve different purposes.
+
+<CardGroup cols={2}>
+  <Card title="pt_full_build" icon="rocket">
+    All-in-one pipeline: plan + validate + fix + generate + explain in a single call.
+    Returns a **human-readable report** describing every decision. Best for interactive
+    prompts where you want an immediate overview.
+  </Card>
+  <Card title="pt_plan_topology" icon="code">
+    Returns machine-readable **JSON** (`TopologyPlan`). Use this when you need the plan
+    as structured input for downstream tools like `pt_generate_script`,
+    `pt_generate_configs`, or `pt_export`.
+  </Card>
+</CardGroup>
+
+<Warning>
+`pt_full_build` is not intended as JSON input for other tools — its output is a narrative report with the JSON embedded at the end for reference only. For programmatic pipelines, always use `pt_plan_topology`.
+</Warning>
+
+## Using `pt_plan_topology`
+
+### Example Request
+
+The simplest call passes a natural-language description. You can optionally specify a template, routing protocol, number of routers, PCs per LAN, and more.
+
+```json
+{
+  "description": "Build a network with 2 routers, 2 switches, 4 PCs, DHCP and static routing",
+  "template": "multi_lan",
+  "routing": "static",
+  "routers": 2,
+  "pcs_per_lan": 2,
+  "dhcp": true
+}
+```
+
+### Example Response (excerpt)
+
+```json
+{
+  "devices": [
+    { "name": "R1", "model": "2911", "category": "router", "x": 100, "y": 100,
+      "interfaces": { "GigabitEthernet0/0": "192.168.0.1/24", "GigabitEthernet0/1": "10.0.0.1/30" } },
+    { "name": "R2", "model": "2911", "category": "router", "x": 350, "y": 100,
+      "interfaces": { "GigabitEthernet0/0": "192.168.1.1/24", "GigabitEthernet0/1": "10.0.0.2/30" } },
+    { "name": "SW1", "model": "2960-24TT", "category": "switch", "x": 100, "y": 250 },
+    { "name": "SW2", "model": "2960-24TT", "category": "switch", "x": 350, "y": 250 },
+    { "name": "PC1", "model": "PC-PT", "category": "pc",
+      "interfaces": { "FastEthernet0": "192.168.0.2/24" }, "gateway": "192.168.0.1" },
+    { "name": "PC2", "model": "PC-PT", "category": "pc",
+      "interfaces": { "FastEthernet0": "192.168.0.3/24" }, "gateway": "192.168.0.1" }
+  ],
+  "links": [
+    { "device_a": "R1", "port_a": "GigabitEthernet0/1", "device_b": "R2", "port_b": "GigabitEthernet0/1", "cable": "cross" },
+    { "device_a": "R1", "port_a": "GigabitEthernet0/0", "device_b": "SW1", "port_b": "GigabitEthernet0/1", "cable": "straight" }
+  ],
+  "dhcp_pools": [
+    { "router": "R1", "pool_name": "LAN_R1_0", "network": "192.168.0.0", "mask": "255.255.255.0",
+      "gateway": "192.168.0.1", "dns": "8.8.8.8" }
+  ],
+  "static_routes": [
+    { "router": "R1", "destination": "192.168.1.0", "mask": "255.255.255.0", "next_hop": "10.0.0.2" },
+    { "router": "R2", "destination": "192.168.0.0", "mask": "255.255.255.0", "next_hop": "10.0.0.1" }
+  ],
+  "is_valid": true
+}
+```
+
+## Prompt Tips
+
+<Accordion title="Be specific about device counts">
+  Say "3 routers, 2 PCs per LAN" rather than "a few routers with some PCs." The planner
+  uses explicit numbers to determine subnet count, port allocation, and route generation.
+</Accordion>
+
+<Accordion title="Name the routing protocol">
+  Include "OSPF," "EIGRP," "RIP," or "static routing" in your prompt. Without it, the
+  planner defaults to `static` for most templates. For redundant topologies, say
+  "OSPF with floating static backup routes."
+</Accordion>
+
+<Accordion title="Mention DHCP explicitly">
+  DHCP pool generation is on by default, but stating "with DHCP" makes the intent clear
+  and avoids the LLM accidentally passing `dhcp: false`.
+</Accordion>
+
+<Accordion title="Specify serial links when needed">
+  No router has Serial ports by default — they require HWIC or NIM modules. Say
+  "connect routers via serial links" or "use serial WAN connections" and the planner
+  will automatically select and install the right module (e.g., `HWIC-2T` on a 2911).
+</Accordion>
+
+<Accordion title="Use a template for common patterns">
+  Saying "hub-and-spoke topology" will pick the `hub_spoke` template with EIGRP routing
+  and 4 routers by default, which is much more efficient than describing every parameter.
+</Accordion>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="pt_plan_topology" icon="map" href="/tools/pt-plan-topology">
+    Full parameter reference for the planning tool
+  </Card>
+  <Card title="pt_full_build" icon="wand-magic-sparkles" href="/tools/pt-full-build">
+    All-in-one build + explain pipeline
+  </Card>
+</CardGroup>

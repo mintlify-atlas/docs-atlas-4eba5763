@@ -1,0 +1,152 @@
+---
+title: "pt_validate_plan: Validate a TopologyPlan"
+sidebarTitle: "pt_validate_plan"
+description: "pt_validate_plan checks a TopologyPlan against 24 typed error codes, flagging device model errors, port conflicts, cable mismatches, and IP issues."
+---
+
+`pt_validate_plan` runs a structured validation pass over a `TopologyPlan` JSON and returns a typed result containing errors, warnings, and a validity flag. The validation engine checks four categories independently — device models, cable types and port conflicts, IP addressing, and DHCP — and collects all issues before returning, so you see every problem in a single call rather than fixing one at a time. Each error carries a machine-readable `error_code` from a fixed set of 24 codes, a human-readable `message`, the affected `device`, and a `suggestion` for how to fix it.
+
+## Parameter
+
+<ParamField body="plan_json" type="string" required>
+  The `TopologyPlan` serialized as a JSON string — the direct output of `pt_plan_topology`. The tool first checks that the JSON is parseable and contains a non-empty `devices` array before running any domain validation.
+</ParamField>
+
+## Returns
+
+<ResponseField name="valid" type="boolean">
+  `true` when there are zero errors (warnings are allowed). `false` if any error was found.
+</ResponseField>
+
+<ResponseField name="error_count" type="integer">
+  Total number of errors in the plan.
+</ResponseField>
+
+<ResponseField name="warning_count" type="integer">
+  Total number of warnings in the plan.
+</ResponseField>
+
+<ResponseField name="errors" type="array">
+  List of error objects. Each object has: `error_code` (string), `device` (string), `message` (string), `suggestion` (string).
+</ResponseField>
+
+<ResponseField name="warnings" type="array">
+  List of warning objects with the same shape as errors. Warnings do not make the plan invalid but indicate configuration issues worth reviewing.
+</ResponseField>
+
+<ResponseField name="summary" type="string">
+  A one-line human-readable summary: `"✅ Plan válido. Sin errores."` or `"❌ Plan con N error(es)."`.
+</ResponseField>
+
+## 24 Error Codes
+
+The validator reports errors using a fixed taxonomy of `ErrorCode` values. The table below groups them by category.
+
+### Device Errors
+
+| Error Code | Meaning |
+|------------|---------|
+| `UNKNOWN_DEVICE_MODEL` | A device references a model name that does not exist in the 74-model catalog |
+| `DUPLICATE_DEVICE_NAME` | Two or more devices share the same name |
+| `INSUFFICIENT_PORTS` | A router or switch does not have enough physical ports for all its declared links |
+
+### Cable & Link Errors
+
+| Error Code | Meaning |
+|------------|---------|
+| `DEVICE_NOT_FOUND` | A link references a device name that does not exist in the plan |
+| `INVALID_PORT` | A link references a port name that does not exist on the device's model |
+| `PORT_ALREADY_USED` | The same port appears in more than one link on the same device |
+| `INVALID_CABLE_TYPE` | The cable type specified for a link is not one of the 15 supported PT cable types |
+
+### IP Errors
+
+| Error Code | Meaning |
+|------------|---------|
+| `INVALID_IP_ADDRESS` | An IP address on a device interface is malformed or not a valid IPv4 address |
+| `SUBNET_OVERLAP` | Two or more LAN or link subnets have overlapping address ranges |
+| `IP_CONFLICT` | Two devices share the same IP address |
+
+### DHCP Errors
+
+| Error Code | Meaning |
+|------------|---------|
+| `DHCP_ROUTER_NOT_FOUND` | A DHCP pool references a router name that does not exist in the plan |
+| `DHCP_GATEWAY_MISMATCH` | A DHCP pool's gateway IP does not match any interface on its router (reported as a **warning**, not an error) |
+
+### Routing Errors
+
+| Error Code | Meaning |
+|------------|---------|
+| `UNSUPPORTED_ROUTING_PROTOCOL` | The routing protocol value is not one of `static`, `ospf`, `eigrp`, `rip`, `none` |
+| `TEMPLATE_CONSTRAINT_VIOLATION` | The number of routers or switches violates a constraint of the selected template |
+
+### ACL Errors
+
+| Error Code | Meaning |
+|------------|---------|
+| `ACL_ROUTER_NOT_FOUND` | An ACL references a router not present in the active topology |
+| `ACL_INTERFACE_NOT_FOUND` | An ACL binding references an interface not found on the router |
+| `ACL_INVALID_NUMBER` | The ACL number is outside IOS valid ranges (standard: 1–99, extended: 100–199) |
+| `ACL_TYPE_MISMATCH` | The ACL number range contradicts the declared ACL type |
+| `ACL_DUPLICATE_SEQUENCE` | Two or more ACL entries share the same sequence number |
+| `ACL_INVALID_WILDCARD` | A wildcard mask in an ACL entry is not a valid inverse mask |
+| `ACL_INVALID_PROTOCOL_FOR_PORTS` | Port operators (`eq`, `range`) are used with a protocol that does not support ports |
+| `ACL_UNREACHABLE_RULE` | A `permit any` or `deny any` rule makes subsequent rules unreachable |
+| `ACL_EMPTY` | An ACL was declared with no entries |
+
+### NAT Errors
+
+| Error Code | Meaning |
+|------------|---------|
+| `NAT_ROUTER_NOT_FOUND` | NAT config references a router not in the topology |
+| `NAT_INTERFACE_NOT_FOUND` | Inside or outside interface not found on the router |
+| `NAT_INVALID_IP` | A static NAT mapping contains a malformed IP address |
+| `NAT_POOL_RANGE_INVALID` | The NAT pool start IP is higher than the pool end IP |
+| `NAT_MISSING_INSIDE_NETWORKS` | Dynamic or PAT mode requires `inside_networks` but none were provided |
+| `NAT_MISSING_STATIC_MAPPINGS` | Static NAT mode requires `static_mappings` but none were provided |
+| `NAT_SAME_INTERFACE` | Inside and outside interfaces are the same interface |
+
+### General Errors
+
+| Error Code | Meaning |
+|------------|---------|
+| `INVALID_INTERFACE_ASSIGNMENT` | An interface assignment is structurally invalid |
+| `VALIDATION_ERROR` | A catch-all for validation failures that do not fit a more specific category |
+
+## Example Validation Error Response
+
+```json
+{
+  "valid": false,
+  "error_count": 2,
+  "warning_count": 1,
+  "errors": [
+    {
+      "error_code": "INVALID_PORT",
+      "device": "R1",
+      "message": "Port 'GigabitEthernet0/3' does not exist on model '1941' (has 2 GigabitEthernet ports)",
+      "suggestion": "Use GigabitEthernet0/0 or GigabitEthernet0/1, or upgrade the router model to 2911"
+    },
+    {
+      "error_code": "PORT_ALREADY_USED",
+      "device": "R2",
+      "message": "Port 'GigabitEthernet0/0' is used in more than one link",
+      "suggestion": "Assign the second link to GigabitEthernet0/1"
+    }
+  ],
+  "warnings": [
+    {
+      "error_code": "DHCP_GATEWAY_MISMATCH",
+      "device": "R1",
+      "message": "DHCP pool gateway 192.168.1.1 does not match any R1 interface",
+      "suggestion": "Check that the DHCP pool gateway matches the router's LAN interface IP"
+    }
+  ],
+  "summary": "❌ Plan con 2 error(es)."
+}
+```
+
+<Tip>
+After receiving validation errors, use `pt_fix_plan` to automatically correct the most common issues — wrong cable types, insufficient ports leading to model upgrades, and invalid port reassignments. After auto-fixing, run `pt_validate_plan` again to confirm the plan is clean before generating scripts.
+</Tip>

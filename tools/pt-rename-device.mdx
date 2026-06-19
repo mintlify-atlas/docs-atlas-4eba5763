@@ -1,0 +1,68 @@
+---
+title: "pt_rename_device: Rename a Device in Packet Tracer"
+sidebarTitle: "pt_rename_device"
+description: "pt_rename_device changes a device's display name in the active Packet Tracer topology without removing it or its connections."
+---
+
+`pt_rename_device` sends a `renameDevice(oldName, newName)` call to the Packet Tracer Script Engine via the HTTP bridge. The device's icon label is updated on the canvas and its identity in the internal network model changes to the new name — all existing cable connections remain intact. No interfaces, IP configurations, or routing settings are affected by the rename.
+
+## Parameters
+
+<ParamField body="old_name" type="string" required>
+  The current name of the device in Packet Tracer, exactly as it appears on the canvas. Names are case-sensitive. Use `pt_query_topology` to list the exact current names before renaming.
+</ParamField>
+
+<ParamField body="new_name" type="string" required>
+  The new display name to assign to the device. Must be a valid Packet Tracer device name (alphanumeric, hyphens, and underscores are safe; avoid spaces and special characters).
+</ParamField>
+
+## Return value
+
+<ResponseField name="result" type="string">
+  On success: `"Dispositivo renombrado: '{old_name}' → '{new_name}'"`.
+
+  On failure: `"Error: {reason}"` where reason is the message returned by PT's Script Engine (for example, if `old_name` does not exist).
+
+  If PT does not respond within 8 seconds: `"Sin respuesta de PT."`.
+</ResponseField>
+
+## Use cases
+
+**Correcting auto-generated names** — `pt_live_deploy` and `pt_plan_topology` use deterministic names like `R1`, `SW1`, `PC1`. If PT auto-assigned names like `Router0` before the rename patch ran, use `pt_rename_device` to correct them.
+
+**Aligning with naming conventions** — enterprise naming schemes (e.g. `CORE-SW-01`, `BRANCH-R-02`) can be applied after initial deployment without rebuilding the topology.
+
+**Resolving name conflicts** — if a device was accidentally deployed with a duplicate name, rename one of them before adding routes or ACLs that reference device names.
+
+## Bridge requirement
+
+`pt_rename_device` requires the HTTP bridge to be active and PTBuilder to be polling. The call uses a bidirectional round-trip with an 8-second timeout. Call `pt_bridge_status` to verify the connection is ready before using this tool.
+
+## Important: downstream name references
+
+After renaming a device, any subsequent MCP tool calls that reference the device by name must use the **new name**. The old name is no longer valid in PT's network model. In particular:
+
+- `pt_delete_device` — use the new name
+- `pt_move_device` — use the new name
+- `pt_delete_link` — use the new name
+- `pt_add_module` — use the new name
+- `pt_apply_acl` / `pt_apply_nat` — the `router` parameter must match the new name
+
+<Tip>
+  After renaming, call `pt_query_topology` to confirm the change is reflected in the canvas before proceeding with further modifications.
+</Tip>
+
+## Example
+
+Rename the auto-deployed `R1` to follow a branch-office naming convention:
+
+```
+pt_rename_device("R1", "BRANCH-R-01")
+```
+
+Then verify:
+
+```
+pt_query_topology()
+# BRANCH-R-01    Router [2911]  pos=(100,100)
+```

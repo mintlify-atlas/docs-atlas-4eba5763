@@ -1,0 +1,69 @@
+---
+title: "pt_query_topology: Read Devices from Packet Tracer"
+sidebarTitle: "pt_query_topology"
+description: "pt_query_topology reads the currently loaded devices and their positions from a running Packet Tracer canvas via the HTTP bridge."
+---
+
+`pt_query_topology` sends a `queryTopology()` call to the Packet Tracer Script Engine via the HTTP bridge and returns a structured list of every device currently on the active logical canvas. Each entry includes the device name, type, model, and canvas coordinates. This is the primary way to inspect what is running in Packet Tracer before making modifications with other live tools.
+
+## Parameters
+
+This tool takes no parameters.
+
+## Return value
+
+<ResponseField name="topology" type="string">
+  A formatted list of devices found in the active topology. Each line shows the device name (padded), its type category, model name in brackets, and canvas position. Example:
+
+  ```
+  Dispositivos en Packet Tracer (8):
+
+  R1               Router [2911]  pos=(100,100)
+  R2               Router [2911]  pos=(400,100)
+  SW1              Switch [2960-24TT]  pos=(100,300)
+  SW2              Switch [2960-24TT]  pos=(400,300)
+  PC1              PC [PC-PT]  pos=(100,500)
+  PC2              PC [PC-PT]  pos=(200,500)
+  ```
+
+  If no devices are found, returns `"No hay dispositivos en la topología actual."`.
+
+  If the bridge is not connected, returns the bridge error message with the bootstrap snippet.
+</ResponseField>
+
+## Use cases
+
+**Verify a deploy succeeded** — after calling `pt_live_deploy`, call `pt_query_topology` to confirm all expected devices appeared on the canvas and their names match the plan.
+
+**Inspect an existing topology** — open a `.pkt` file in Packet Tracer, then call `pt_query_topology` to get the exact device names and models before planning modifications.
+
+**Get device names before editing** — `pt_delete_device`, `pt_rename_device`, `pt_move_device`, and `pt_delete_link` all require exact device names. Use `pt_query_topology` to list the current names first.
+
+**Validate model compatibility** — when planning to call `pt_add_module`, confirm the device model from the query output to check HWIC / NIM / NM slot compatibility before installing.
+
+## Type resolution
+
+The tool resolves device types from PT's internal numeric type codes to human-readable labels. If PT returns an `"unknown"` type name, the tool falls back to the catalog (`resolve_model`) to determine the category from the model name:
+
+| PT type code | Label |
+|---|---|
+| 0 | Router |
+| 1 | Switch |
+| 7 | AccessPoint |
+| 8 | PC |
+| 9 | Server |
+| 16 | L3 Switch |
+| 17 | Laptop |
+| 18 | Tablet |
+
+## Bridge requirement
+
+`pt_query_topology` requires the HTTP bridge to be active and PTBuilder to be polling. It uses a long-poll round-trip (`GET /result` with a 10-second timeout) to wait for PT to return the topology data. If the bridge is up but PT is not connected, the tool returns the bridge error message.
+
+<Note>
+  Call `pt_bridge_status` first if you are unsure whether the bridge is active. A 10-second timeout with no response typically means PT is open but the bootstrap is not running.
+</Note>
+
+## Runtime patches dependency
+
+Before executing `queryTopology()`, the tool ensures the runtime patches are injected into PT (idempotent — sent only once per PT session). The patches define `queryTopology` itself as a bridge-aware function that serializes the current device list and posts it back via `reportResult(...)`. If the patches are not applied, `queryTopology` will not be defined in the Script Engine and the call will time out.

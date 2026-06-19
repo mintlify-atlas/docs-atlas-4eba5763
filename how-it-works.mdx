@@ -1,0 +1,184 @@
+---
+title: "How MCP Packet Tracer Plans and Deploys Networks"
+sidebarTitle: "How It Works"
+description: "Explore the planning, validation, generation, and live-deploy pipeline inside MCP Packet Tracer, from natural language prompt to running topology."
+---
+
+When you ask your AI assistant to "create a network with 3 routers, OSPF, and DHCP," MCP Packet Tracer runs a multi-stage pipeline entirely in Python before a single command ever reaches Cisco Packet Tracer. The pipeline transforms a loosely worded request into a machine-validated `TopologyPlan`, emits PTBuilder JavaScript and IOS CLI config blocks, and — if the HTTP bridge is active — streams every command directly into PT's Script Engine in real time. Nothing is copy-pasted; nothing is invented.
+
+## Full Data Flow
+
+```
+TopologyRequest
+      │
+  Orchestrator ─── IPPlanner (assigns /24 LANs + /30 inter-router links)
+      │
+  Validator    ─── 24 typed error codes, port/cable/IP checks
+      │
+  AutoFixer    ─── fixes wrong cables, upgrades routers, reassigns ports
+      │
+  TopologyPlan (validated, fully addressed)
+      │
+  ┌──────────────────┬──────────────────────┬──────────────────────┐
+  ▼                  ▼                      ▼                      ▼
+addDevice()      addModule()            addLink()        configureIosDevice()
+(place device)   (HWIC/NIM/NM)          (cable)          configurePcIp()
+  │                  │                      │                      │
+PTBuilder Script ── sent via HTTP bridge ─▶ Packet Tracer Script Engine
+```
+
+And from a higher vantage point, the complete system looks like this:
+
+```
+Natural language prompt
+        │
+  LLM (GitHub Copilot / Claude / Codex)
+        │  MCP tools
+  Packet Tracer MCP Server   (:39000)
+        │  HTTP bridge
+  PTBuilder in Packet Tracer  (:54321)
+        │  Script Engine
+  Cisco Packet Tracer
+  ── devices created
+  ── cables connected
+  ── IOS configs applied
+```
+
+## Pipeline Stages
+
+### Stage 1 — Planning (Orchestrator)
+
+The `Orchestrator` (`domain/services/orchestrator.py`) is the entry point for `pt_plan_topology` and `pt_full_build`. It receives a `TopologyRequest` — a Pydantic model carrying router count, switch count, PC count, routing protocol, DHCP flag, and optional overrides — and builds an empty `TopologyPlan`, then populates it in three sub-phases:
+
+1. **Device creation** — routers, switches, PCs, laptops, access points, servers, and the WAN cloud node are instantiated as `DevicePlan` objects with canvas coordinates computed from layout constants.
+2. **Link creation** — the orchestrator walks through device-category pairs (router↔router, router↔switch, switch↔PC, etc.), picks the next available port on each device, infers the correct cable type from device categories, and appends `LinkPlan` objects.
+3. **IP addressing** — delegated to `IPPlanner` (see Stage 2).
+
+The orchestrator then calls the validator and returns the `(plan, validation_result)` tuple.
+
+### Stage 2 — IP Addressing (IPPlanner)
+
+`IPPlanner` (`domain/services/ip_planner.py`) assigns all addresses automatically using two non-overlapping pools:
+
+| Network | Base | Prefix | Purpose |
+|---------|------|--------|---------|
+| LAN subnets | `192.168.0.0/16`, sequential | /24 | One subnet per router LAN; gateway at `.1` |
+| Inter-router links | `10.0.0.0/16`, sequential | /30 | Point-to-point router links; 2 usable hosts |
+
+Rules applied during addressing:
+- The gateway interface on each router always receives `.1`.
+- PCs, laptops, and servers receive sequential IPs from `.2` onward.
+- DHCP pools are generated per LAN with the gateway excluded.
+- DNS defaults to `8.8.8.8`.
+- Static routing uses BFS to compute multi-hop reachability, so all routes are correct even in topologies with four or more routers.
+
+### Stage 3 — Validation (Validator, 24 Error Codes)
+
+`validate_plan` (`domain/services/validator.py`) applies four independent rule sets to the completed plan:
+
+| Rule module | What it checks |
+|-------------|----------------|
+| `device_rules.py` | Model names against the 74-device catalog, duplicate device names |
+| `cable_rules.py` | Cable type validity, port name conflicts, crossover vs. straight-through correctness |
+| `ip_rules.py` | IP uniqueness across all interfaces, subnet overlap between LANs |
+| `dhcp_rules` (via `ip_rules.py`) | DHCP gateway coherence; gateway mismatches surface as warnings rather than blocking errors |
+
+Errors are returned as typed `PlanError` objects with one of 24 `ErrorCode` enum values. DHCP gateway mismatches are demoted to warnings; all other issues are errors that block generation.
+
+<Note>
+  You can call `pt_validate_plan` directly at any time to inspect errors and warnings on an existing plan JSON without re-running the full pipeline.
+</Note>
+
+### Stage 4 — Auto-fixing (AutoFixer)
+
+`AutoFixer` (`domain/services/auto_fixer.py`) runs after validation and attempts to repair common structural problems automatically:
+
+- **Wrong cable types** — replaces the inferred cable with the correct one based on updated device-category rules.
+- **Router model upgrades** — if a required port count exceeds what the current model provides (e.g., a 3-router chain needs three GigabitEthernet ports on the middle router but a `1841` only has two), the model is upgraded to a `2911`.
+- **Port reassignment** — if a port is double-assigned or missing from the catalog, the fixer reallocates from the next available port.
+
+Call `pt_fix_plan` to apply the auto-fixer to any plan, or use `pt_full_build` which runs the complete pipeline including fixing in one call.
+
+### Stage 5 — Generation (PTBuilder JS + IOS CLI)
+
+Two generators translate the validated `TopologyPlan` into executable output:
+
+**PTBuilder JavaScript** (`infrastructure/generator/ptbuilder_generator.py`)
+
+Emits `addDevice`, `addModule`, and `addLink` calls in the required PTBuilder execution order: devices first, then modules (so expansion hardware exists before ports are referenced), then links.
+
+```javascript
+addDevice("R1", "2911", 100, 100);
+addModule("R1", "0/0", "HWIC-2T");   // installs 2 serial ports in HWIC slot 0/0
+addLink("R1", "Serial0/0/0", "R2", "Serial0/0/0", "serial");
+```
+
+**IOS CLI configs** (`infrastructure/generator/cli_config_generator.py`)
+
+Emits `configureIosDevice` calls with full IOS command blocks: `interface` stanzas with IP addresses, `router ospf` / `router eigrp` / `router rip` blocks, `ip dhcp pool` definitions, and static `ip route` entries. ACL and NAT configs are handled by their own generators (`acl_cli_generator.py` and `nat_cli_generator.py`).
+
+### Stage 6 — Live Deploy (HTTP Bridge at :54321)
+
+The `PTCommandBridge` (`infrastructure/execution/live_bridge.py`) is a lightweight `ThreadingHTTPServer` that starts automatically on port `54321` when the MCP server launches. It exposes three endpoints:
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/next` | GET | PTBuilder polls this every 500 ms to fetch the next queued command |
+| `/ping` | GET | Health check; marks the bridge as connected |
+| `/status` | GET | Returns `{"connected": bool, "last_poll_ago": float}` |
+
+The `LiveExecutor` (`infrastructure/execution/live_executor.py`) calls `generate_executable_script(plan)`, splits the output into individual command lines, and sends each one to the bridge queue with a configurable delay between commands.
+
+On the Packet Tracer side, a one-time bootstrap snippet injected into PT's PTBuilder webview runs a `setInterval` loop every 500 ms. When it finds a command at `/next`, it calls `$se('runCode', cmd)` to execute it in PT's Script Engine.
+
+<Warning>
+  The PT Script Engine is not the same context as the PTBuilder webview. PTBuilder has full XMLHttpRequest support (it runs in Chromium/QWebEngine); the Script Engine does not. The bootstrap must run inside the webview via `window.webview.evaluateJavaScriptAsync(...)`. Also, PTBuilder's `executeCode()` strips all newlines internally, which is why the bootstrap uses `/* */` block comments instead of `//` line comments.
+</Warning>
+
+## Port Reference
+
+| Port | Service | Purpose |
+|------|---------|---------|
+| **39000** | MCP server (streamable-http) | Receives tool calls from the LLM or editor extension |
+| **54321** | HTTP bridge | Queues JS commands for PTBuilder to execute in Packet Tracer |
+
+Port 39000 was chosen to avoid collisions with common development ports (3000, 5000, 8000, 8080) and the internal bridge at 54321.
+
+## Transport Modes
+
+<Accordion title="stdio vs. streamable-http — which to use">
+
+**stdio** is the recommended mode for desktop clients (Claude Code, Claude Desktop, Cursor, VS Code). The MCP client spawns `python -m packet_tracer_mcp --stdio` as a child process. The server starts on demand and exits when the client disconnects. The HTTP bridge to Packet Tracer still starts inside the spawned process, so live deploy works identically.
+
+**streamable-http** (`http://127.0.0.1:39000/mcp`) is useful when:
+- Multiple editor windows or clients need to share one server instance.
+- You want the server and its PT bridge connection to remain alive across editor restarts.
+- You are debugging and want to `curl http://127.0.0.1:39000/mcp` or tail server logs in a terminal.
+
+Start the HTTP server with:
+
+```bash
+python -m packet_tracer_mcp
+```
+
+Both modes expose the same 33 tools and 5 resources with identical behaviour.
+
+</Accordion>
+
+## Architecture Layers
+
+The codebase follows a clean layered architecture inside `src/packet_tracer_mcp/`:
+
+| Layer | Path | Responsibility |
+|-------|------|---------------|
+| **Adapters** | `adapters/mcp/` | MCP tool and resource registrations (`@mcp.tool`, `@mcp.resource`) |
+| **Application** | `application/` | DTOs and use-case handlers — one per tool |
+| **Domain** | `domain/` | Core business logic: models, orchestrator, IP planner, validator, auto-fixer, explainer, estimator, and typed rules |
+| **Infrastructure** | `infrastructure/` | Catalog definitions (74 devices, 151 modules, 15 cables), code generators, HTTP bridge, executors, and project persistence |
+| **Shared** | `shared/` | Enums, constants, and utility functions used across all layers |
+
+The domain layer has zero infrastructure dependencies — it does not import from `infrastructure/` or `adapters/`. This means planning, validation, and generation can all be tested and run without Packet Tracer present.
+
+<Tip>
+  Use `pt_estimate_plan` for a fast dry-run that returns device counts, link counts, and config counts without generating the full plan. This is useful for confirming a request is feasible before committing to the full `pt_plan_topology` pipeline.
+</Tip>

@@ -1,0 +1,80 @@
+---
+title: "pt_send_raw: Execute Arbitrary JavaScript in Packet Tracer"
+sidebarTitle: "pt_send_raw"
+description: "pt_send_raw sends arbitrary JavaScript to the Packet Tracer Script Engine via the HTTP bridge for advanced automation beyond the built-in tools."
+---
+
+`pt_send_raw` is the escape hatch for advanced Packet Tracer automation. It queues arbitrary JavaScript code on the HTTP bridge at `http://127.0.0.1:54321/queue`, where PTBuilder's webview picks it up and executes it in Packet Tracer's Script Engine via `$se('runCode', ...)`. This tool bypasses all validation, planning, and abstraction layers — giving you direct access to PT's full Script Engine API for custom operations, debugging, or scenarios not covered by the standard tools.
+
+## Parameters
+
+<ParamField body="js_code" type="string" required>
+  JavaScript code to execute in Packet Tracer's Script Engine. The code runs in the same context as PTBuilder's `userfunctions.js`, so all built-in functions (`addDevice`, `addLink`, `configureIosDevice`, `ipc`, `$se`, etc.) and the runtime-patched helpers (`lwAddDevice`, `lwAddLink`, `configurePcIp`, `addModule`) are available. The script engine strips newlines, so use semicolons as statement separators rather than relying on line breaks.
+</ParamField>
+
+<ParamField body="wait_result" type="boolean" default="false">
+  When `true`, the tool sends the code and then blocks on `GET /result` for up to 10 seconds, waiting for the JavaScript to call `reportResult(value)` to post a return value back through the bridge. When `false`, the code is queued fire-and-forget and the tool returns `"Comando enviado a PT."` immediately.
+</ParamField>
+
+## Return value
+
+<ResponseField name="result" type="string">
+  - `wait_result=false`: `"Comando enviado a PT."` on success, or `"Error al enviar comando al bridge."` if the HTTP POST fails.
+  - `wait_result=true`: The string value passed to `reportResult(...)` by the JavaScript code, or `"Sin respuesta (timeout). Asegúrate de que el código llame a reportResult(...)."` if no result arrives within 10 seconds.
+</ResponseField>
+
+## Use cases
+
+**Explore the PT Script Engine API** — query device properties, list ports, or inspect the network model without a structured tool:
+
+```javascript
+reportResult(JSON.stringify(ipc.network().getDevice("R1").getPorts()))
+```
+
+**Custom device configuration** — apply configuration not covered by the standard tools, such as setting banner messages or enabling specific IOS features:
+
+```javascript
+configureIosDevice("R1", "banner motd # Authorized access only #\nservice password-encryption")
+```
+
+**Debugging a failed deploy** — check whether a device was created correctly after `pt_live_deploy`:
+
+```javascript
+var d = ipc.network().getDevice("R1"); reportResult(d ? "found: " + d.getModel() : "not found")
+```
+
+**One-off topology operations** — add a single device or link that is not part of a full plan:
+
+```javascript
+lwAddDevice("MGMT-PC", 8, "PC-PT", 700, 500); lwAddLink("SW1", "FastEthernet0/24", "MGMT-PC", "FastEthernet0", "straight")
+```
+
+## Script Engine context
+
+The Script Engine runs ECMAScript (not Node.js) with PTBuilder's `userfunctions.js` in scope. Key built-ins available:
+
+| Object / function | Description |
+|---|---|
+| `ipc` | PTBuilder IPC object — root of the PT API |
+| `ipc.network()` | Access the PT network model (devices, ports, links) |
+| `ipc.appWindow()` | Access the PT application window and workspace |
+| `$se(method, arg)` | Call Script Engine methods directly |
+| `addDevice(name, model, x, y)` | Add a device (low-level, physical view) |
+| `lwAddDevice(name, type, model, x, y)` | Add a device to logical canvas (patched helper) |
+| `lwAddLink(d1, p1, d2, p2, cable)` | Add a cable to logical canvas (patched helper) |
+| `configureIosDevice(name, commands)` | Push IOS CLI to a router/switch (patched helper) |
+| `configurePcIp(name, dhcp, ip, mask, gw)` | Configure PC IP (patched helper) |
+| `reportResult(value)` | Post a result back to the bridge (used with `wait_result=true`) |
+| `allModuleTypes` | Map of module name strings to PT module type objects |
+
+<Warning>
+  `pt_send_raw` performs no validation — malformed JavaScript will execute directly in Packet Tracer's Script Engine and may trigger error popups, crash the bootstrap polling loop, or leave the topology in an inconsistent state. Always test complex scripts with `wait_result=true` to catch exceptions. Use the structured MCP tools whenever possible and reserve `pt_send_raw` for operations they do not cover.
+</Warning>
+
+## Bridge requirement
+
+`pt_send_raw` requires the HTTP bridge to be active and PTBuilder to be polling. Call `pt_bridge_status` to verify the connection before using this tool.
+
+<Tip>
+  Wrap complex multi-statement scripts in an IIFE so that `return` statements work correctly and early exits do not leak into subsequent Script Engine calls: `(function(){ ... })()`.
+</Tip>

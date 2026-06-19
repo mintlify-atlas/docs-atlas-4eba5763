@@ -1,0 +1,75 @@
+---
+title: "pt_deploy: Copy-to-Clipboard Deployment"
+sidebarTitle: "pt_deploy"
+description: "pt_deploy copies the PTBuilder JavaScript script to the clipboard and provides instructions for manually pasting it into Packet Tracer's Builder Code Editor."
+---
+
+`pt_deploy` is the clipboard-based deployment path — an alternative to `pt_live_deploy` that works without an active HTTP bridge. It generates the full PTBuilder JavaScript script from a `TopologyPlan`, copies it to the Windows clipboard using `clip.exe`, exports all project files (script, CLI configs, plan JSON) to the `projects/` directory, and returns human-readable step-by-step paste instructions. This makes it the safest option when you want to review the script before running it, or when the live bridge is not configured.
+
+## Parameters
+
+<ParamField body="plan_json" type="string" required>
+  The `TopologyPlan` JSON produced by `pt_plan_topology` or `pt_full_build`. Must contain at least one device.
+</ParamField>
+
+<ParamField body="project_name" type="string" default="topology">
+  A short identifier used to name the project directory under `output_dir`. Spaces are replaced with underscores. Example: `"campus_ospf"` creates `projects/campus_ospf/`.
+</ParamField>
+
+<ParamField body="output_dir" type="string" default="projects">
+  Base directory where project files are exported. Relative to the MCP server's working directory.
+</ParamField>
+
+## Return value
+
+<ResponseField name="result" type="string">
+  A multi-section report that includes: clipboard status, project directory path, device and link counts, a list of exported file paths, and numbered step-by-step instructions for completing the deployment in Packet Tracer.
+</ResponseField>
+
+## What `pt_deploy` does
+
+When called, the executor runs these steps in sequence:
+
+1. Calls `generate_ptbuilder_script` to produce the `lwAddDevice` / `addModule` / `lwAddLink` script
+2. Attempts to copy the script to the Windows clipboard via `clip.exe` (`sys.platform == "win32"` check)
+3. Writes `topology.js`, `full_build.js`, `{Device}_config.txt` for each router/switch, and `plan.json` to `projects/{project_name}/`
+4. Returns the clipboard status, file paths, and step-by-step instructions
+
+<Note>
+  Clipboard copy only works on Windows. On Linux and macOS, `pt_deploy` skips the clipboard step and falls back to file export only. The instructions will direct you to open `topology.js` manually instead.
+</Note>
+
+## When to use `pt_deploy`
+
+| Scenario | Recommendation |
+|----------|----------------|
+| HTTP bridge not configured or Packet Tracer is not open | ✅ Use `pt_deploy` |
+| You want to inspect the script before running it | ✅ Use `pt_deploy` |
+| You need the CLI configs saved as files for reference | ✅ Use `pt_deploy` (exports `*_config.txt`) |
+| Packet Tracer is open and the bootstrap is running | ✅ Prefer `pt_live_deploy` |
+
+## How to paste the script into Packet Tracer
+
+After `pt_deploy` returns, follow these steps to build the topology:
+
+1. Open **Cisco Packet Tracer 8.2+**
+2. Go to **Extensions → Builder Code Editor** (or **Extensions → Scripting** depending on your PT version)
+3. Click inside the code editor pane to focus it
+4. Press **Ctrl+V** to paste the script from clipboard
+5. Click **Run** (or the play button) to execute
+
+Packet Tracer will create all devices and cables automatically. You can then apply each router's CLI config by double-clicking the device → CLI tab → pasting the content of the corresponding `*_config.txt` file.
+
+## Difference from `pt_live_deploy`
+
+| | `pt_deploy` | `pt_live_deploy` |
+|---|---|---|
+| **Requires bridge** | No | Yes (port 54321) |
+| **Requires PT open** | No | Yes |
+| **Applies configs automatically** | No — manual CLI paste | Yes — `configureIosDevice` called automatically |
+| **Works on non-Windows** | Partial (file export only) | Yes (bridge is cross-platform) |
+| **Script review before run** | Yes | No — streams immediately |
+
+<Tip>
+  After running `pt_deploy`, the exported `full_build.js` file contains both the structural PTBuilder calls and the IOS CLI configs as `/* */` comments — useful as a complete single-file reference for the topology.
+</Tip>

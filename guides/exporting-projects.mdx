@@ -1,0 +1,154 @@
+---
+title: "Export and Save Topology Plans and CLI Configs"
+sidebarTitle: "Exporting Projects"
+description: "Use pt_export to save topology plans as JSON, PTBuilder scripts as JS, and per-device IOS CLI configs as text files for reuse and version control."
+---
+
+Every artifact produced by the MCP server can be written to disk for later reuse, version control, or manual review before deployment. `pt_export` serializes the full `TopologyPlan` as JSON, emits PTBuilder JavaScript scripts that can recreate the topology, and writes per-device IOS CLI configuration blocks as individual text files — all in one call. Projects are saved under a named directory and can be listed and reloaded at any time with `pt_list_projects` and `pt_load_project`.
+
+<Tip>
+If the HTTP bridge to Packet Tracer is not active, export the `topology.js` script and paste it manually into Packet Tracer's Builder Code Editor. This gives you the same result as `pt_live_deploy` without a live connection.
+</Tip>
+
+## What `pt_export` Saves
+
+`pt_export` writes the following files under `projects/{project_name}/`:
+
+| File | Description |
+|---|---|
+| `plan.json` | The full `TopologyPlan` object serialized as JSON — devices, links, IPs, routes, DHCP pools, modules, and validation results |
+| `topology.js` | PTBuilder JavaScript script (`addDevice`, `addModule`, `addLink` calls only) — places devices and cables without IOS config |
+| `full_build.js` | Complete script including all `configureIosDevice` and `configurePcIp` calls — everything needed to recreate the topology from scratch |
+| `{Device}_config.txt` | Per-device IOS CLI config block — one file per router (e.g., `R1_config.txt`, `R2_config.txt`) |
+| `metadata.json` | Project metadata: name, creation timestamp, device count, link count, validity flag |
+
+### Output Directory Structure
+
+```text
+projects/
+└── my_ospf_topology/
+    ├── plan.json
+    ├── topology.js
+    ├── full_build.js
+    ├── R1_config.txt
+    ├── R2_config.txt
+    ├── R3_config.txt
+    └── metadata.json
+```
+
+### Example `plan.json` (excerpt)
+
+```json
+{
+  "devices": [
+    {
+      "name": "R1",
+      "model": "2911",
+      "category": "router",
+      "interfaces": {
+        "GigabitEthernet0/0": "192.168.0.1/24",
+        "GigabitEthernet0/1": "10.0.0.1/30"
+      }
+    }
+  ],
+  "links": [
+    {
+      "device_a": "R1", "port_a": "GigabitEthernet0/1",
+      "device_b": "R2", "port_b": "GigabitEthernet0/1",
+      "cable": "cross"
+    }
+  ],
+  "is_valid": true
+}
+```
+
+### Example `topology.js` (excerpt)
+
+```javascript
+addDevice("R1", "2911", 100, 100);
+addDevice("R2", "2911", 350, 100);
+addDevice("SW1", "2960-24TT", 100, 250);
+addModule("R1", "0/0", "HWIC-2T");
+addLink("R1", "Serial0/0/0", "R2", "Serial0/0/0", "serial");
+addLink("R1", "GigabitEthernet0/0", "SW1", "GigabitEthernet0/1", "straight");
+```
+
+### Example `R1_config.txt`
+
+```text
+enable
+configure terminal
+hostname R1
+no ip domain-lookup
+
+interface GigabitEthernet0/0
+ ip address 192.168.0.1 255.255.255.0
+ no shutdown
+ exit
+
+interface GigabitEthernet0/1
+ ip address 10.0.0.1 255.255.255.252
+ no shutdown
+ exit
+
+ip dhcp excluded-address 192.168.0.1 192.168.0.1
+ip dhcp pool LAN_R1_0
+ network 192.168.0.0 255.255.255.0
+ default-router 192.168.0.1
+ dns-server 8.8.8.8
+ exit
+
+ip route 192.168.1.0 255.255.255.0 10.0.0.2
+
+end
+write memory
+```
+
+## Project Management
+
+### Listing Projects
+
+`pt_list_projects` reads the `projects/` directory and returns metadata for every saved project:
+
+```json
+[
+  {
+    "project_name": "my_ospf_topology",
+    "created_at": "2025-01-15T10:32:00+00:00",
+    "devices": 8,
+    "links": 7,
+    "is_valid": true
+  }
+]
+```
+
+### Loading a Project
+
+`pt_load_project` reads `plan.json` from the named project directory and returns the full `TopologyPlan` object, ready to pass to any downstream tool:
+
+```json
+{ "project_name": "my_ospf_topology" }
+```
+
+The returned plan can then be fed into `pt_generate_script`, `pt_generate_configs`, `pt_live_deploy`, or any other tool that accepts a `TopologyPlan`.
+
+## Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Version Control" icon="code-branch">
+    Commit `plan.json` and `*_config.txt` files to Git alongside your network diagrams
+    for full change tracking and rollback.
+  </Card>
+  <Card title="Manual Review" icon="magnifying-glass">
+    Inspect `full_build.js` and config files before deploying to catch any issues
+    you want to fix manually in IOS before pushing to the live topology.
+  </Card>
+  <Card title="Reuse Across Sessions" icon="rotate">
+    Save a validated plan today, load it in a new session, and redeploy or modify
+    it without re-running the full planning pipeline.
+  </Card>
+  <Card title="Sharing" icon="share-nodes">
+    Share `topology.js` with colleagues who can paste it directly into their own
+    Packet Tracer instance — no MCP server required on their end.
+  </Card>
+</CardGroup>

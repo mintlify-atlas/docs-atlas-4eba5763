@@ -1,47 +1,137 @@
 ---
-title: "Quickstart"
-description: "Begin with a guide on the fastest path to a successful outcome"
+title: "Get Started with MCP Packet Tracer in 5 Minutes"
+sidebarTitle: "Quickstart"
+description: "Install MCP Packet Tracer, connect it to your AI client, and deploy your first Cisco network topology in under five minutes."
 ---
 
-Describe how someone begins using your product. What is the first thing they need to do? Are there any prerequisites?
-
-A quickstart should take someone from zero to using your product. They'll get a quick win and a sense of what they can accomplish.
-
-## Prerequisites
-
-Before you begin, you must have:
-
-- Requirement one (for example, Node.js 18+, a free account, an API key)
-- Requirement two (for example, a compatible device, a compatible browser, a compatible operating system)
-
-## Get started
+By the end of this guide you will have the MCP Packet Tracer server installed, wired up to your AI client of choice, and ready to generate a fully addressed, validated Cisco network topology — complete with IOS CLI configs, DHCP pools, and routing configuration — from a single natural-language prompt. Live deployment into a running Packet Tracer instance is optional and takes one extra step.
 
 <Steps>
-  <Step title="Install">
-    Describe how to install your product or sign up.
 
-    ```bash
-    npm install your-package
-    ```
-  </Step>
-  <Step title="Configure">
-    Describe any setup or configuration needed before first use.
+### Clone and install
 
-    ```bash
-    your-cli init
-    ```
-  </Step>
-  <Step title="Run it">
-    Show the first thing a user does to see it working.
+Clone the repository and install the package in editable mode. After this, the `packet_tracer_mcp` module is importable from any directory — you do not need to keep a terminal open in the repo folder.
 
-    ```bash
-    your-cli start
-    ```
-  </Step>
-</Steps>
+```bash
+git clone https://github.com/Mats2208/MCP-Packet-Tracer
+cd MCP-Packet-Tracer
+pip install -e .
+```
+
+The only runtime dependencies (`mcp[cli]>=1.0.0` and `pydantic>=2.0.0`) are installed automatically.
+
+### Connect your MCP client
+
+Most desktop clients support **stdio** transport: the client spawns the server as a child process on demand, so no background server process is needed. The internal HTTP bridge to Packet Tracer (`:54321`) still starts automatically inside the spawned process, so live deploy works the same way.
+
+**Claude Code — one CLI command:**
+
+```bash
+claude mcp add --scope user --transport stdio packet-tracer -- python -m packet_tracer_mcp --stdio
+```
+
+The `--scope user` flag registers the server in your global `~/.claude.json` so it is available from any directory, not just the repo. Verify the connection:
+
+```bash
+claude mcp list
+# packet-tracer: python -m packet_tracer_mcp --stdio - ✓ Connected
+```
+
+For other clients (Claude Desktop, VS Code / Copilot, Cursor, OpenAI Codex CLI), see [Client Setup](/setup/client-setup). Every client uses the same command and args:
+
+| Field | Value |
+|-------|-------|
+| `command` | `python` |
+| `args` | `["-m", "packet_tracer_mcp", "--stdio"]` |
+| `transport` / `type` | `stdio` |
 
 <Tip>
-  Give people a way to get help. This could be a link to a support page, a chat with a customer support agent, or a forum for your product.
-
-  Example: Need help? Reach out to us at [support@yourcompany.com](mailto:support@yourcompany.com).
+  If your client supports **streamable-http** and you want a persistent server shared across multiple windows, start the server manually with `python -m packet_tracer_mcp` (no flags) and point your client at `http://127.0.0.1:39000/mcp`.
 </Tip>
+
+### (Optional) Enable live deploy
+
+To have the server stream commands directly into a running Packet Tracer instance — no copy-pasting required — you need to paste a one-time bootstrap snippet into PT's Builder Code Editor.
+
+1. Open **Cisco Packet Tracer 8.2+**.
+2. Go to **Extensions → Builder Code Editor**.
+3. Paste the following script and click **Run**:
+
+```javascript
+/* PT-MCP Bridge */ window.webview.evaluateJavaScriptAsync("setInterval(function(){var x=new XMLHttpRequest();x.open('GET','http://127.0.0.1:54321/next',true);x.onload=function(){if(x.status===200&&x.responseText){$se('runCode',x.responseText)}};x.onerror=function(){};x.send()},500)");
+```
+
+This injects a polling loop into PT's PTBuilder webview. Every 500 ms it calls the bridge at `:54321/next`, picks up any queued command, and executes it in PT's Script Engine via `$se('runCode', ...)`. You only need to do this once per Packet Tracer session.
+
+For full setup details and troubleshooting, see [Live Deploy Setup](/setup/live-deploy).
+
+<Note>
+  The planning, validation, generation, and export tools all work without Packet Tracer open. You can generate scripts and configs and export them to disk even when PT is not running.
+</Note>
+
+### Ask the LLM to build a network
+
+With the server connected, ask your AI assistant to build a topology in plain English:
+
+```
+"Create a network with 2 routers, 2 switches, 4 PCs, DHCP and static routing"
+```
+
+The server handles the complete pipeline — **planning → validation → generation → deploy** — and returns a human-readable summary. Here is what `pt_full_build` produces for this prompt:
+
+```
+Devices (8):  R1, R2 (2911), SW1, SW2 (2960-24TT), PC1, PC2, PC3, PC4 (PC-PT)
+Links   (7):  R1<->R2 (cross), R1<->SW1 (straight), R2<->SW2 (straight),
+              SW1<->PC1, SW1<->PC2, SW2<->PC3, SW2<->PC4 (all straight)
+
+IP Plan:
+  LAN 1:  192.168.0.0/24 -- R1 Gig0/0: .1, PC1: .2, PC2: .3
+  LAN 2:  192.168.1.0/24 -- R2 Gig0/0: .1, PC3: .2, PC4: .3
+  Link:   10.0.0.0/30    -- R1 Gig0/1: 10.0.0.1, R2 Gig0/1: 10.0.0.2
+
+DHCP:   Pools on R1 (192.168.0.0/24) and R2 (192.168.1.0/24)
+Routes: Bidirectional static routes on R1 and R2
+
+Generated:  8x addDevice, 7x addLink, 2x configureIosDevice, 4x configurePcIp
+```
+
+If the HTTP bridge is active, calling `pt_live_deploy` sends all 21 commands through the bridge and the topology appears in Packet Tracer fully configured — devices placed, cables connected, IOS configs applied.
+
+</Steps>
+
+## Two Transport Modes
+
+<Accordion title="When to use stdio vs. streamable-http">
+
+**stdio** (recommended for most users)
+- The MCP client spawns `python -m packet_tracer_mcp --stdio` as a child process.
+- Zero manual steps — no server to start or stop.
+- Works from any directory after `pip install -e .`.
+- The internal HTTP bridge to Packet Tracer (`:54321`) starts automatically inside the spawned process.
+
+**streamable-http** (`http://127.0.0.1:39000/mcp`)
+- You start the server once with `python -m packet_tracer_mcp` (no `--stdio` flag).
+- Multiple clients (VS Code windows, Claude Desktop, browser-based tools) can connect to the same instance simultaneously.
+- Server state — including the PT bridge connection — persists across client sessions.
+- Useful for remote or shared scenarios.
+
+Both modes expose the same 33 tools and 5 resources.
+
+</Accordion>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="How It Works" icon="diagram-project" href="/how-it-works">
+    Understand the full planning, validation, and live-deploy pipeline.
+  </Card>
+  <Card title="Tools Overview" icon="wrench" href="/tools/overview">
+    Browse all 33 tools across 11 groups with descriptions and usage notes.
+  </Card>
+  <Card title="Client Setup" icon="plug" href="/setup/client-setup">
+    Step-by-step configuration for Claude Desktop, VS Code, Cursor, and Codex CLI.
+  </Card>
+  <Card title="Live Deploy" icon="bolt" href="/setup/live-deploy">
+    Set up the HTTP bridge for real-time command streaming into Packet Tracer.
+  </Card>
+</CardGroup>

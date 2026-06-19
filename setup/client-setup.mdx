@@ -1,0 +1,205 @@
+---
+title: "Connect MCP Packet Tracer to Your AI Client"
+sidebarTitle: "Client Setup"
+description: "Step-by-step instructions to register MCP Packet Tracer with Claude Code, Claude Desktop, VS Code, Cursor, Codex CLI, or any MCP-compatible client."
+---
+
+MCP Packet Tracer supports two transport modes: **stdio**, where the AI client spawns the server as a child process on demand (recommended for all desktop clients), and **streamable-HTTP**, where you start the server yourself and multiple clients or editor windows share the same instance via `http://127.0.0.1:39000/mcp`. Choose stdio for the simplest zero-configuration experience; choose streamable-HTTP when you need persistent shared state across multiple windows or remote scenarios.
+
+<Note>
+  All examples below assume you have already installed the package by running:
+
+  ```bash
+  git clone https://github.com/Mats2208/MCP-Packet-Tracer
+  cd MCP-Packet-Tracer
+  pip install -e .
+  ```
+
+  After `pip install -e .`, the `packet_tracer_mcp` module is importable from **any** directory, so `python -m packet_tracer_mcp --stdio` works without `cd`-ing into the repo first.
+</Note>
+
+## Choose Your Client
+
+<Tabs>
+  <Tab title="Claude Code">
+    Claude Code accepts a single CLI command that registers the server globally in `~/.claude.json`, making it available from every directory you launch `claude` in.
+
+    ```bash
+    claude mcp add --scope user --transport stdio packet-tracer -- python -m packet_tracer_mcp --stdio
+    ```
+
+    - `--scope user` writes to your global profile — no per-project setup needed.
+    - The `--` separator passes everything after it verbatim to the spawned process.
+
+    **Verify the connection:**
+
+    ```bash
+    claude mcp list
+    # packet-tracer: python -m packet_tracer_mcp --stdio - ✓ Connected
+    ```
+
+    **Remove later if needed:**
+
+    ```bash
+    claude mcp remove packet-tracer --scope user
+    ```
+  </Tab>
+
+  <Tab title="Claude Desktop">
+    Claude Desktop reads its MCP configuration from a JSON file whose location depends on **how Claude Desktop was installed**. The Microsoft Store (MSIX) edition sandboxes `AppData` and uses a different path — a detail the official Anthropic docs do not always mention.
+
+    **Find your config file:**
+
+    | OS / install source | Config path |
+    |---|---|
+    | Windows — installer from [claude.ai/download](https://claude.ai/download) | `%APPDATA%\Claude\claude_desktop_config.json` |
+    | Windows — Microsoft Store / MSIX | `%LOCALAPPDATA%\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude_desktop_config.json` |
+    | macOS | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+    | Linux | `~/.config/Claude/claude_desktop_config.json` |
+
+    To determine which Windows install you have, run the following in PowerShell. If the path contains `WindowsApps\Claude_*`, you have MSIX — use the second row in the table above.
+
+    ```bash
+    Get-Process claude | Select-Object -ExpandProperty Path
+    ```
+
+    **Add (or merge) the following into your config file:**
+
+    ```json
+    {
+      "mcpServers": {
+        "packet-tracer": {
+          "command": "python",
+          "args": ["-m", "packet_tracer_mcp", "--stdio"]
+        }
+      }
+    }
+    ```
+
+    After saving, **fully quit** Claude Desktop and reopen it — closing the window is not enough if "run in background" is enabled. On Windows, right-click the tray icon → **Quit**, or force-stop it with:
+
+    ```bash
+    Get-Process claude | Stop-Process -Force
+    ```
+
+    **Windows / MSIX gotcha — `python` not found on PATH:**
+
+    The MSIX sandbox may not expose `python` on PATH. If the MCP indicator never lights up, replace `"python"` with the absolute path to your interpreter:
+
+    ```json
+    {
+      "mcpServers": {
+        "packet-tracer": {
+          "command": "C:\\Users\\YOU\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+          "args": ["-m", "packet_tracer_mcp", "--stdio"]
+        }
+      }
+    }
+    ```
+
+    Find your interpreter path with `where.exe python` (PowerShell) or `which python` (bash/zsh). Server logs are written to `<config-dir>\logs\mcp-server-packet-tracer.log`.
+  </Tab>
+
+  <Tab title="VS Code">
+    VS Code (Copilot, Continue, Cline, and other MCP-aware extensions) reads MCP server configuration from `.vscode/mcp.json` in your workspace root.
+
+    **Option 1 — stdio (recommended):** VS Code spawns the server automatically when needed.
+
+    ```json
+    {
+      "servers": {
+        "packet-tracer": {
+          "type": "stdio",
+          "command": "python",
+          "args": ["-m", "packet_tracer_mcp", "--stdio"]
+        }
+      }
+    }
+    ```
+
+    **Option 2 — streamable-HTTP:** Useful when you want one persistent server shared across multiple VS Code windows or when you need to inspect logs in a dedicated terminal.
+
+    ```json
+    {
+      "servers": {
+        "packet-tracer": {
+          "url": "http://127.0.0.1:39000/mcp"
+        }
+      }
+    }
+    ```
+
+    For the HTTP option, start the server first in any terminal before opening VS Code:
+
+    ```bash
+    python -m packet_tracer_mcp
+    # Serving on http://127.0.0.1:39000/mcp
+    ```
+
+    The internal HTTP bridge to Packet Tracer always starts automatically on port `54321`, regardless of which transport mode you choose.
+  </Tab>
+
+  <Tab title="Cursor">
+    Cursor supports both per-user and per-project MCP configuration files.
+
+    - **Per-user (global):** `~/.cursor/mcp.json`
+    - **Per-project:** `<workspace>/.cursor/mcp.json`
+
+    ```json
+    {
+      "mcpServers": {
+        "packet-tracer": {
+          "command": "python",
+          "args": ["-m", "packet_tracer_mcp", "--stdio"]
+        }
+      }
+    }
+    ```
+
+    After saving, reload the Cursor window to pick up the new server:
+
+    **Cmd/Ctrl + Shift + P → "Reload Window"**
+
+    Cursor will spawn the server on the first MCP tool call and keep it alive for the session.
+  </Tab>
+
+  <Tab title="Codex CLI">
+    OpenAI Codex CLI uses **TOML**, not JSON. Open `~/.codex/config.toml` (Windows: `%USERPROFILE%\.codex\config.toml`) and append the following section:
+
+    ```toml
+    [mcp_servers.packet-tracer]
+    command = "python"
+    args = ["-m", "packet_tracer_mcp", "--stdio"]
+    ```
+
+    Restart your `codex` session — Codex picks up MCP servers at launch and will show `packet-tracer` in the tools list.
+  </Tab>
+
+  <Tab title="Generic stdio">
+    The vast majority of MCP-compatible clients accept the same three core fields for stdio transport. Translate the values below into whatever syntax your client expects.
+
+    | Field | Value |
+    |---|---|
+    | `command` | `python` (or the absolute interpreter path on sandboxed / MSIX systems) |
+    | `args` | `["-m", "packet_tracer_mcp", "--stdio"]` |
+    | `transport` / `type` | `stdio` |
+
+    For HTTP-only clients, start the server manually first:
+
+    ```bash
+    python -m packet_tracer_mcp
+    ```
+
+    Then point your client at `http://127.0.0.1:39000/mcp`.
+  </Tab>
+</Tabs>
+
+## After Connecting
+
+Once your client shows the server as connected, you can immediately ask your LLM to build a network:
+
+```
+"Create a network with 2 routers, 2 switches, 4 PCs, DHCP and static routing"
+```
+
+The server handles the full pipeline automatically: **planning → validation → generation → deploy**. For live deployment into a running Packet Tracer instance, see [Live Deploy Setup](/setup/live-deploy).

@@ -1,0 +1,168 @@
+---
+title: "pt_list_devices, pt_list_templates, pt_get_device_details"
+sidebarTitle: "pt_catalog"
+description: "Reference for catalog query tools — list all 74 devices, browse topology templates, or get full port details for a specific device model or alias."
+---
+
+Catalog query tools give you read-only access to the MCP-Packet-Tracer built-in device and template registries without touching a live Packet Tracer session. Use them before planning a topology to verify which models are available, what ports they carry, and which of the 101 aliases the planner understands. They are also useful for double-checking that the router model you intend to use has enough ports — and for discovering which expansion module to install when it doesn't.
+
+---
+
+## pt\_list\_devices
+
+Returns every device model in the catalog, along with its ports and all registered aliases.
+
+### Parameters
+
+This tool takes no parameters.
+
+### Returns
+
+A formatted list of all **74 device models** grouped by category, each showing:
+
+<ResponseField name="display_name" type="string">
+  Human-readable model name, e.g. `"Cisco 2911"`, `"Cisco 2960-24TT"`, `"Generic Router"`.
+</ResponseField>
+
+<ResponseField name="pt_type" type="string">
+  The exact PT model identifier used in `pt_plan_topology`, `pt_add_module`, and the device catalog, e.g. `"2911"`, `"2960-24TT"`, `"ISR4321"`.
+</ResponseField>
+
+<ResponseField name="category" type="string">
+  Device category: `router`, `switch`, `pc`, `server`, `laptop`, `cloud`, `accesspoint`, `firewall`, `wlc`, `modem`, `hub`, `bridge`, `repeater`, and others.
+</ResponseField>
+
+<ResponseField name="ports" type="string">
+  Comma-separated list of port full names with their speed, e.g. `GigabitEthernet0/0, GigabitEthernet0/1, GigabitEthernet0/2` for the Cisco 2911.
+</ResponseField>
+
+The output also appends a complete **alias table** — all **101 registered aliases** mapped to their target PT model. This is the same table that `pt_plan_topology` and `pt_get_device_details` use when resolving names like `"router"`, `"switch"`, or `"firewall"`.
+
+Selected aliases include:
+
+| Alias | Resolves To |
+|---|---|
+| `"router"` | `2911` |
+| `"switch"` | `2960-24TT` |
+| `"firewall"` | `5506-X` |
+| `"isr4321"` / `"4321"` | `ISR4321` |
+| `"isr4331"` / `"4331"` | `ISR4331` |
+| `"pc"` / `"computer"` | `PC-PT` |
+| `"server"` | `Server-PT` |
+| `"ap"` / `"wifi"` | `AccessPoint-PT` |
+| `"cloud"` / `"wan"` | `Cloud-PT` |
+
+---
+
+## pt\_get\_device\_details
+
+Returns the full port specification for a single device model, including port names and their speeds.
+
+### Parameters
+
+<ParamField query="model_name" type="string" required>
+  Model name or alias to look up. Accepts both the exact PT type identifier (e.g. `"2911"`, `"2960-24TT"`) and any alias from the catalog (e.g. `"router"`, `"switch"`, `"firewall"`, `"isr4321"`). Case-insensitive for aliases.
+</ParamField>
+
+### Returns
+
+A JSON object:
+
+<ResponseField name="display_name" type="string">
+  Human-readable name, e.g. `"Cisco 2911"`.
+</ResponseField>
+
+<ResponseField name="category" type="string">
+  Device category, e.g. `"router"`, `"switch"`, `"firewall"`.
+</ResponseField>
+
+<ResponseField name="ports" type="array">
+  Array of port objects, each with `name` (full port name) and `speed` (port speed string).
+</ResponseField>
+
+<ResponseField name="total_ports" type="integer">
+  Number of physical ports on the base model (before any expansion modules).
+</ResponseField>
+
+### Example
+
+Calling `pt_get_device_details("2911")` returns:
+
+```json
+{
+  "display_name": "Cisco 2911",
+  "category": "router",
+  "ports": [
+    { "name": "GigabitEthernet0/0", "speed": "GigabitEthernet" },
+    { "name": "GigabitEthernet0/1", "speed": "GigabitEthernet" },
+    { "name": "GigabitEthernet0/2", "speed": "GigabitEthernet" }
+  ],
+  "total_ports": 3
+}
+```
+
+If the model is not found, the tool returns a plain-text message and suggests calling `pt_list_devices`.
+
+---
+
+## pt\_list\_templates
+
+Returns all topology templates available in the MCP-Packet-Tracer planner. Templates define default router counts, PC counts, routing protocol, and WAN requirements that `pt_plan_topology` uses when `template` is specified.
+
+### Parameters
+
+This tool takes no parameters.
+
+### Returns
+
+A formatted list of all **9 topology templates**, each showing:
+
+<ResponseField name="name" type="string">
+  Display name, e.g. `"Multi LAN"`, `"Three Router Triangle"`.
+</ResponseField>
+
+<ResponseField name="key" type="string">
+  Template key to pass to `pt_plan_topology` as the `template` parameter.
+</ResponseField>
+
+<ResponseField name="description" type="string">
+  Short description of the topology layout.
+</ResponseField>
+
+<ResponseField name="min_routers / max_routers / default_routers" type="integer">
+  Router count constraints and defaults for this template.
+</ResponseField>
+
+<ResponseField name="default_pcs_per_lan" type="integer">
+  Default PC count per LAN segment.
+</ResponseField>
+
+<ResponseField name="requires_wan" type="boolean">
+  Whether the template adds a Cloud-PT WAN device by default.
+</ResponseField>
+
+<ResponseField name="default_routing" type="string">
+  Default routing protocol for this template (`"static"`, `"ospf"`, etc.).
+</ResponseField>
+
+<ResponseField name="tags" type="array">
+  Descriptive tags for discovery, e.g. `["avanzado", "redundancia", "ospf"]`.
+</ResponseField>
+
+### Template summary
+
+| Key | Name | Default Routers | WAN | Default Routing |
+|---|---|---|---|---|
+| `single_lan` | Single LAN | 1 | No | static |
+| `multi_lan` | Multi LAN | 2 | No | static |
+| `multi_lan_wan` | Multi LAN + WAN | 3 | Yes | static |
+| `star` | Star (Hub & Spoke) | 1 | No | static |
+| `hub_spoke` | Hub and Spoke | 4 | No | static |
+| `branch_office` | Branch Office | 3 | Yes | static |
+| `three_router_triangle` | Three Router Triangle | 3 (fixed) | No | ospf |
+| `router_on_a_stick` | Router on a Stick | 1 | No | static |
+| `custom` | Custom | 2 | No | static |
+
+<Tip>
+  Call `pt_list_devices` before planning to confirm the exact model identifier and available interfaces for the routers and switches you intend to use. If a model lacks enough ports for the planned topology, `pt_get_device_details` will show you what's available, and the expansion module tools (`pt_add_module`, `pt_install_modules_batch`) can add the missing interfaces.
+</Tip>

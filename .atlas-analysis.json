@@ -1,0 +1,164 @@
+{
+  "projectType": "ai-ml",
+  "projectName": "MCP Packet Tracer",
+  "projectDescription": "An AI-powered MCP server that lets any LLM plan, validate, generate, and deploy full Cisco Packet Tracer network topologies (OSPF, DHCP, EIGRP, RIP) from natural language prompts via 33 MCP tools and a real-time HTTP bridge.",
+  "theme": "luma",
+  "primaryColor": "#26bfc0",
+  "lightColor": "#0c1d2d",
+  "darkColor": "#d2d5d8",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "how-it-works"
+            ]
+          },
+          {
+            "group": "Setup & Configuration",
+            "pages": [
+              "setup/client-setup",
+              "setup/live-deploy",
+              "setup/transport-modes"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/planning-topologies",
+              "guides/routing-protocols",
+              "guides/acl-and-nat",
+              "guides/expansion-modules",
+              "guides/ip-addressing",
+              "guides/exporting-projects"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "reference/device-catalog",
+              "reference/cable-types",
+              "reference/topology-templates",
+              "reference/mcp-resources",
+              "reference/architecture"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "MCP Tools",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "tools/overview"
+            ]
+          },
+          {
+            "group": "Planning & Validation",
+            "pages": [
+              "tools/pt-plan-topology",
+              "tools/pt-validate-plan",
+              "tools/pt-fix-plan",
+              "tools/pt-explain-plan",
+              "tools/pt-estimate-plan",
+              "tools/pt-full-build"
+            ]
+          },
+          {
+            "group": "Generation & Deploy",
+            "pages": [
+              "tools/pt-generate-script",
+              "tools/pt-generate-configs",
+              "tools/pt-deploy",
+              "tools/pt-live-deploy",
+              "tools/pt-bridge-status"
+            ]
+          },
+          {
+            "group": "Topology Interaction",
+            "pages": [
+              "tools/pt-query-topology",
+              "tools/pt-delete-device",
+              "tools/pt-rename-device",
+              "tools/pt-move-device",
+              "tools/pt-delete-link",
+              "tools/pt-send-raw"
+            ]
+          },
+          {
+            "group": "Modules, ACL & NAT",
+            "pages": [
+              "tools/pt-modules",
+              "tools/pt-acl",
+              "tools/pt-nat"
+            ]
+          },
+          {
+            "group": "Catalog & Projects",
+            "pages": [
+              "tools/pt-catalog",
+              "tools/pt-projects"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Natural-language to topology: describe a network in plain text, get a fully addressed, validated TopologyPlan",
+    "33 MCP tools covering the complete plan → validate → generate → deploy pipeline",
+    "Real-time live deploy via HTTP bridge to a running Cisco Packet Tracer instance",
+    "Automatic IP addressing: sequential /24 LANs and /30 inter-router WAN links",
+    "Full routing protocol support: Static, OSPF, EIGRP, RIP v2 with real IOS command generation",
+    "24-code typed validation engine with auto-fixer for cables, ports, and device models",
+    "ACL support: standard (1-99), extended (100-199), and named ACLs on live routers",
+    "NAT/PAT support: static NAT, dynamic NAT, and PAT overload on live routers",
+    "74 device models across 34 categories, 151 expansion modules, 15 cable types",
+    "5 MCP read-only catalog resources accessible by any MCP client",
+    "Dual transport: stdio (desktop clients) and streamable-HTTP (:39000) for shared/remote scenarios",
+    "38-test suite covering IP planning, validation, auto-fixer, generation, and integration"
+  ],
+  "publicApiSurface": [
+    "pt_plan_topology(request_json: str) -> str",
+    "pt_validate_plan(plan_json: str) -> str",
+    "pt_fix_plan(plan_json: str) -> str",
+    "pt_explain_plan(plan_json: str) -> str",
+    "pt_estimate_plan(...) -> str",
+    "pt_full_build(...) -> str",
+    "pt_generate_script(plan_json: str, include_configs: bool) -> str",
+    "pt_generate_configs(plan_json: str) -> str",
+    "pt_deploy(plan_json: str) -> str",
+    "pt_live_deploy(plan_json: str, ...) -> str",
+    "pt_bridge_status() -> str",
+    "pt_query_topology() -> str",
+    "pt_delete_device(device_name: str) -> str",
+    "pt_rename_device(old_name: str, new_name: str) -> str",
+    "pt_move_device(device_name: str, x: int, y: int) -> str",
+    "pt_delete_link(device_name: str, interface_name: str) -> str",
+    "pt_send_raw(js_code: str, wait_result: bool) -> str",
+    "pt_list_modules(router_model: str, category: str) -> str",
+    "pt_add_module(device_name: str, slot: str, module: str) -> str",
+    "pt_install_modules_batch(...) -> str",
+    "pt_apply_acl(...) -> str",
+    "pt_remove_acl(...) -> str",
+    "pt_apply_nat(...) -> str",
+    "pt_remove_nat(...) -> str",
+    "pt_list_devices() -> str",
+    "pt_list_templates() -> str",
+    "pt_get_device_details(model_name: str) -> str",
+    "pt_export(plan_json: str, ...) -> str",
+    "pt_list_projects(output_dir: str) -> str",
+    "pt_load_project(project_name: str, output_dir: str) -> str",
+    "pt://catalog/devices (MCP Resource)",
+    "pt://catalog/cables (MCP Resource)",
+    "pt://catalog/aliases (MCP Resource)",
+    "pt://catalog/templates (MCP Resource)",
+    "pt://capabilities (MCP Resource)"
+  ]
+}

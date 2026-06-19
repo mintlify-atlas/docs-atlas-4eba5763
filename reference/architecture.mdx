@@ -1,0 +1,224 @@
+---
+title: "MCP Packet Tracer Architecture and Code Layout"
+sidebarTitle: "Architecture"
+description: "Deep dive into the domain-driven layered architecture of MCP Packet Tracer: adapters, application, domain, infrastructure, and how they connect."
+---
+
+MCP Packet Tracer is built on a domain-driven design (DDD) inspired layered architecture. The codebase is divided into four concentric layers — Adapters, Application, Domain, and Infrastructure — plus a thin Shared module for cross-cutting concerns. Each layer has a single responsibility: Adapters expose the MCP surface, Application orchestrates use cases, Domain holds all business logic and models, and Infrastructure handles I/O, generation, and external systems (Packet Tracer itself). Dependencies always flow inward: Infrastructure depends on Domain, Application depends on Domain, and Adapters depend on Application. Nothing in Domain or Shared knows about PT, FastMCP, or HTTP.
+
+## Directory Tree
+
+```
+src/packet_tracer_mcp/
+├── adapters/
+│   └── mcp/
+│       ├── tool_registry.py       # All 33 MCP tools (@mcp.tool decorators)
+│       └── resource_registry.py   # All 5 MCP resources (@mcp.resource decorators)
+│
+├── application/
+│   ├── dto/                       # Request/Response data transfer objects
+│   └── use_cases/                 # One use case per tool (plan, validate, fix, ...)
+│
+├── domain/
+│   ├── models/
+│   │   ├── requests.py            # TopologyRequest — input from LLM
+│   │   ├── plans.py               # TopologyPlan, DevicePlan, LinkPlan, ModulePlan
+│   │   ├── acls.py                # ACLPlan, ACLEntry, ACLBinding
+│   │   ├── nat.py                 # NATConfig, NATPool, NATStaticMapping (3 modes)
+│   │   └── errors.py              # PlanError, ErrorCode (24+ codes), ValidationResult
+│   ├── services/
+│   │   ├── orchestrator.py        # Main pipeline: request → TopologyPlan
+│   │   ├── ip_planner.py          # Assigns /24 LANs and /30 inter-router links
+│   │   ├── validator.py           # Validates models, ports, cables, IPs
+│   │   ├── auto_fixer.py          # Fixes cables, upgrades routers, reassigns ports
+│   │   ├── explainer.py           # Natural-language plan explanation
+│   │   └── estimator.py           # Dry-run device/link/config count estimation
+│   └── rules/
+│       ├── device_rules.py        # Validates device models against catalog
+│       ├── cable_rules.py         # Validates cable types and port conflicts
+│       ├── ip_rules.py            # Validates IP uniqueness and subnet conflicts
+│       ├── acl_rules.py           # Validates ACL entries, numbers, wildcards
+│       └── nat_rules.py           # Validates NAT IPs, pool ranges, interface coherence
+│
+├── infrastructure/
+│   ├── catalog/
+│   │   ├── devices.py             # 74 DeviceModel definitions across 34 categories
+│   │   ├── modules.py             # 151 expansion module specs (NM, HWIC, NIM, WIC, SFP)
+│   │   ├── cables.py              # 15 cable types, PT codes, 88 inference rules
+│   │   ├── aliases.py             # 101 model name aliases
+│   │   └── templates.py           # 9 topology template definitions
+│   ├── generator/
+│   │   ├── ptbuilder_generator.py  # Generates addDevice/addModule/addLink JS
+│   │   ├── cli_config_generator.py # Generates IOS CLI blocks (DHCP, routing, ...)
+│   │   ├── acl_cli_generator.py    # Generates access-list / ip access-group CLI
+│   │   └── nat_cli_generator.py    # Generates ip nat inside/outside / pool / overload CLI
+│   ├── execution/
+│   │   ├── live_bridge.py         # PTCommandBridge HTTP server (:54321)
+│   │   ├── live_executor.py       # Converts TopologyPlan → JS commands → bridge
+│   │   ├── deploy_executor.py     # Clipboard deploy + manual instructions
+│   │   └── manual_executor.py     # File export executor
+│   └── persistence/
+│       └── project_repository.py  # Save/load TopologyPlan as JSON projects
+│
+├── shared/
+│   ├── enums.py                   # RoutingProtocol, DeviceCategory, CableType, ...
+│   ├── constants.py               # Defaults, layout values, capabilities
+│   └── utils.py                   # prefix_to_mask and other helpers
+│
+├── server.py                      # FastMCP instance, registers tools/resources
+├── settings.py                    # Server config (version, host, port)
+└── __main__.py                    # python -m packet_tracer_mcp entry point
+```
+
+---
+
+## Layer Explanations
+
+### Adapters — `adapters/mcp/`
+
+The outermost layer. Its only job is to translate between the MCP protocol and the Application layer.
+
+- **`tool_registry.py`** — declares all 33 MCP tools using `@mcp.tool` decorators. Each function validates its input, calls the appropriate application use case, and formats the result as a string or JSON blob for the LLM.
+- **`resource_registry.py`** — declares all 5 MCP resources using `@mcp.resource` decorators. Each resource serialises a catalog structure (from Infrastructure) to a JSON string and returns it as a read-only endpoint at a `pt://` URI.
+
+Neither file contains business logic. Both delegate immediately to Application or Infrastructure.
+
+### Application — `application/use_cases/`
+
+One use case class per MCP tool. Use cases orchestrate Domain services without knowing anything about MCP, HTTP, or Packet Tracer's wire format. A typical use case:
+
+1. Accepts a DTO (data transfer object) from the adapter
+2. Calls one or more Domain services (e.g. `Orchestrator`, `Validator`, `AutoFixer`)
+3. Returns a result DTO to the adapter
+
+DTOs live in `application/dto/` and are simple Pydantic models that decouple the adapter's JSON schema from the domain model structure.
+
+### Domain — `domain/`
+
+The core of the application. No external dependencies except Python standard library and Pydantic. This layer never imports from `adapters/`, `infrastructure/`, or `application/`.
+
+**Models (`domain/models/`):**
+
+| Model | Description |
+|-------|-------------|
+| `TopologyRequest` | Input from the LLM — device list, routing protocol, template, flags |
+| `TopologyPlan` | The validated, fully addressed output plan |
+| `DevicePlan` | One entry per device — model, name, position, IP assignments |
+| `LinkPlan` | One entry per cable — endpoints, port names, cable type |
+| `ModulePlan` | One entry per expansion module — device, slot, module model |
+| `DHCPPool` | Per-LAN DHCP pool — network, gateway, exclusion range, DNS |
+| `StaticRoute` | A single static route entry — destination, mask, next-hop, AD |
+| `OSPFConfig` | OSPF process ID, router-ID, network statements |
+| `RIPConfig` | RIP version 2 network statements |
+| `EIGRPConfig` | EIGRP AS number, network statements, no auto-summary flag |
+| `ACLPlan` | A complete ACL definition — type (standard/extended/named), entries |
+| `ACLEntry` | One ACE — sequence, action, protocol, source, destination, ports |
+| `ACLBinding` | Binds an ACL to a router interface in a direction (in/out) |
+| `NATConfig` | NAT mode (static/dynamic/pat), inside/outside interfaces |
+| `NATPool` | Dynamic NAT pool — name, start IP, end IP, netmask |
+| `NATStaticMapping` | One-to-one static NAT mapping — inside local / inside global |
+| `PlanError` | Structured error with `ErrorCode`, message, device, suggestion |
+| `ValidationResult` | Collection of `PlanError` instances; `is_valid` when errors list is empty |
+
+**Services (`domain/services/`):**
+
+- **`orchestrator.py`** — the main entry point for plan generation. Reads a `TopologyRequest`, calls `IPPlanner` for addressing, and assembles the complete `TopologyPlan`.
+- **`ip_planner.py`** — assigns sequential `/24` LAN subnets from `192.168.0.0/16` and sequential `/30` inter-router link subnets from `10.0.0.0/16`. Gateway is always `.1`; end devices start from `.2`.
+- **`validator.py`** — runs all rule validators, collects `PlanError` instances, and returns a `ValidationResult`.
+- **`auto_fixer.py`** — corrects common validation errors automatically: swaps wrong cable types, upgrades under-ported routers to models with more interfaces, and reassigns conflicting port assignments.
+- **`explainer.py`** — converts a `TopologyPlan` into a human-readable narrative explaining every device, link, IP, DHCP pool, and routing decision.
+- **`estimator.py`** — dry-runs the plan to produce device count, link count, and IOS config command count without generating any actual output.
+
+**Rules (`domain/rules/`):**
+
+Each rule module contains one or more validator functions that accept a plan and return a list of `PlanError` instances:
+
+| Rule Module | What It Validates |
+|-------------|-------------------|
+| `device_rules.py` | Model names exist in catalog, no duplicate device names, sufficient ports |
+| `cable_rules.py` | Cable type is valid, no port used twice on the same device |
+| `ip_rules.py` | IP addresses are valid, subnets don't overlap, no duplicate IPs |
+| `acl_rules.py` | ACL numbers in valid ranges (1–99 standard, 100–199 extended), wildcard masks correct, no unreachable rules, no empty ACL |
+| `nat_rules.py` | NAT IPs valid, pool start ≤ end, inside ≠ outside interface, required fields present for each mode |
+
+### Infrastructure — `infrastructure/`
+
+Handles all I/O, code generation, and external system integration. The catalog sub-package is read-only static data; everything else performs side effects.
+
+**Catalog (`infrastructure/catalog/`):**
+
+Static Python data structures compiled at import time. No database, no file I/O. `devices.py`, `cables.py`, `aliases.py`, and `templates.py` are the single source of truth for the 74 devices, 15 cable types, 101 aliases, and 9 templates exposed via MCP resources.
+
+**Generator (`infrastructure/generator/`):**
+
+- **`ptbuilder_generator.py`** — converts a `TopologyPlan` into a PTBuilder JavaScript script. Emits `addDevice()`, `addModule()`, and `addLink()` calls in the required order. Layout positions are computed from constants in `shared/constants.py`.
+- **`cli_config_generator.py`** — converts a `TopologyPlan` into per-device IOS CLI configuration blocks: `hostname`, `interface` IP assignments, `ip dhcp pool`, `router ospf`/`eigrp`/`rip`, `ip route` statements, and `configurePcIp()` calls.
+- **`acl_cli_generator.py`** — generates `access-list` / `ip access-list extended` / `ip access-group` CLI from `ACLPlan` and `ACLBinding` models.
+- **`nat_cli_generator.py`** — generates `ip nat inside` / `ip nat outside` / `ip nat pool` / `ip nat inside source` CLI from `NATConfig`, `NATPool`, and `NATStaticMapping` models.
+
+**Execution (`infrastructure/execution/`):**
+
+- **`live_bridge.py`** — a lightweight HTTP server that listens on `:54321`. Queues JavaScript command strings. PTBuilder polls `GET /next` every 500 ms and executes whatever arrives via `$se('runCode', ...)`.
+- **`live_executor.py`** — takes a `TopologyPlan`, generates the JS script via the generator, and pushes each command to the bridge.
+- **`deploy_executor.py`** — copies the generated JS script to the clipboard and prints manual paste instructions (used by `pt_deploy`).
+- **`manual_executor.py`** — writes plan JSON, JS script, and CLI configs to disk (used by `pt_export`).
+
+**Persistence (`infrastructure/persistence/`):**
+
+- **`project_repository.py`** — serialises and deserialises `TopologyPlan` objects as JSON files in a local projects directory, enabling `pt_list_projects` and `pt_load_project`.
+
+### Shared — `shared/`
+
+Cross-cutting utilities with no dependencies on any other layer:
+
+- **`enums.py`** — all enumerations: `RoutingProtocol` (static, ospf, eigrp, rip, none), `TopologyTemplate` (9 values), `DeviceCategory` (34 values), `CableType` (15 values), `PortSpeed` (8 values), `DeviceRole` (8 values).
+- **`constants.py`** — default router (`2911`), default switch (`2960-24TT`), IP base addresses, layout pixel values, the `CAPABILITIES` dict served by `pt://capabilities`, and the full `PT_CONNECT_TYPE` code map.
+- **`utils.py`** — `prefix_to_mask()` and other small helpers used by the IP planner and CLI generator.
+
+---
+
+## Domain Error Codes
+
+`ErrorCode` is a string enum with codes grouped by concern. The validator emits these codes inside `PlanError` objects so the LLM can understand exactly what failed and why.
+
+| Group | Error Codes |
+|-------|-------------|
+| **Devices** | `UNKNOWN_DEVICE_MODEL`, `DUPLICATE_DEVICE_NAME`, `INSUFFICIENT_PORTS` |
+| **Links** | `DEVICE_NOT_FOUND`, `INVALID_PORT`, `PORT_ALREADY_USED`, `INVALID_CABLE_TYPE` |
+| **IP** | `INVALID_IP_ADDRESS`, `SUBNET_OVERLAP`, `IP_CONFLICT` |
+| **DHCP** | `DHCP_ROUTER_NOT_FOUND`, `DHCP_GATEWAY_MISMATCH` |
+| **Routing** | `UNSUPPORTED_ROUTING_PROTOCOL` |
+| **Templates** | `TEMPLATE_CONSTRAINT_VIOLATION` |
+| **ACL** | `ACL_ROUTER_NOT_FOUND`, `ACL_INTERFACE_NOT_FOUND`, `ACL_INVALID_NUMBER`, `ACL_TYPE_MISMATCH`, `ACL_DUPLICATE_SEQUENCE`, `ACL_INVALID_WILDCARD`, `ACL_INVALID_PROTOCOL_FOR_PORTS`, `ACL_UNREACHABLE_RULE`, `ACL_EMPTY` |
+| **NAT** | `NAT_ROUTER_NOT_FOUND`, `NAT_INTERFACE_NOT_FOUND`, `NAT_INVALID_IP`, `NAT_INVALID_NETMASK`, `NAT_POOL_RANGE_INVALID`, `NAT_MISSING_INSIDE_NETWORKS`, `NAT_MISSING_STATIC_MAPPINGS`, `NAT_MISSING_POOL`, `NAT_SAME_INTERFACE` |
+| **General** | `INVALID_INTERFACE_ASSIGNMENT`, `VALIDATION_ERROR` |
+
+Each `PlanError` carries the code, a human-readable message, the device name (if applicable), and a `suggestion` string that the auto-fixer and LLM can act on.
+
+---
+
+## Testing
+
+The test suite contains **38 tests** across 8 files, all runnable with `pytest`.
+
+```bash
+# Run all tests
+python -m pytest tests/ -v
+
+# Single file
+python -m pytest tests/test_full_build.py -v
+
+# Specific test
+python -m pytest tests/test_full_build.py::TestFullBuild::test_basic_2_routers -v
+```
+
+| Test File | What It Covers |
+|-----------|----------------|
+| `test_ip_planner.py` | Subnet assignment, gateway placement, sequential PC IP allocation |
+| `test_validator.py` | Device model validation, duplicate device names, invalid port references |
+| `test_auto_fixer.py` | Cable type correction, router model upgrade for insufficient ports, port reassignment |
+| `test_explainer.py` | Natural-language output format and completeness for various plan shapes |
+| `test_estimator.py` | Dry-run device count, link count, and IOS config command count accuracy |
+| `test_generators.py` | `addDevice`/`addLink` JS output correctness, IOS CLI block formatting |
+| `test_full_build.py` | End-to-end pipeline integration from `TopologyRequest` to generated script |
+| `test_regressions_runtime.py` | Regression coverage for known edge cases found during live testing |

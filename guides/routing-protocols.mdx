@@ -1,0 +1,207 @@
+---
+title: "Configure Routing Protocols: OSPF, EIGRP, RIP, Static"
+sidebarTitle: "Routing Protocols"
+description: "How MCP Packet Tracer generates IOS routing commands for Static, OSPF, EIGRP, and RIP v2 topologies, including floating static routes."
+---
+
+MCP Packet Tracer generates complete, ready-to-paste IOS routing configurations for every router in a topology automatically. You never write a single `ip route` or `router ospf` command by hand — just name the protocol in your request and the IP planner calculates all network addresses, wildcard masks, next-hop IPs, and router IDs from the assigned addressing plan, then emits the exact IOS command blocks required for each device.
+
+## Supported Protocols
+
+| Protocol | Key | When to Use |
+|---|---|---|
+| Static | `static` | Small topologies, deterministic paths, CCNA labs |
+| OSPF | `ospf` | Multi-area or redundant topologies; link-state convergence |
+| EIGRP | `eigrp` | Cisco-proprietary; fast convergence, hub-and-spoke designs |
+| RIP v2 | `rip` | Legacy or classroom environments; distance-vector |
+| None | `none` | Manual config; `custom` template with no routing |
+
+## Specifying the Protocol
+
+Set `routing` in the `TopologyRequest`. You can also pass `ospf_process_id` (default `1`) and `eigrp_as` (default `100`) for fine-grained control.
+
+```json
+{
+  "description": "3 routers, 3 LANs, OSPF",
+  "routers": 3,
+  "routing": "ospf",
+  "ospf_process_id": 1
+}
+```
+
+---
+
+## Static Routing
+
+Static routes are the default for most templates. The IP planner runs a **BFS traversal** of the router adjacency graph to compute the correct next-hop for every destination — even in topologies with 4+ routers in a chain, all intermediate hops are resolved correctly.
+
+### Generated IOS Commands
+
+```text
+ip route {destination} {subnet_mask} {next_hop_ip} [admin_distance]
+```
+
+**Example — R1 in a 2-router topology:**
+
+```text
+enable
+configure terminal
+hostname R1
+no ip domain-lookup
+
+interface GigabitEthernet0/0
+ ip address 192.168.0.1 255.255.255.0
+ no shutdown
+ exit
+
+interface GigabitEthernet0/1
+ ip address 10.0.0.1 255.255.255.252
+ no shutdown
+ exit
+
+ip dhcp excluded-address 192.168.0.1 192.168.0.1
+ip dhcp pool LAN_R1_0
+ network 192.168.0.0 255.255.255.0
+ default-router 192.168.0.1
+ dns-server 8.8.8.8
+ exit
+
+ip route 192.168.1.0 255.255.255.0 10.0.0.2
+
+end
+write memory
+```
+
+### Floating Static Routes
+
+Floating static routes serve as backup paths. They have an administrative distance of `254` — higher than any dynamic protocol — so they only activate when the primary route disappears.
+
+Enable them by adding `floating_routes: true` to the request:
+
+```json
+{
+  "routing": "static",
+  "floating_routes": true
+}
+```
+
+The planner finds alternate paths via BFS (blocking the primary next-hop) and generates backup routes like:
+
+```text
+ip route 192.168.1.0 255.255.255.0 10.0.1.2 254
+```
+
+<Note>
+Floating routes are only generated when an alternate physical path exists. In a simple 2-router chain with no redundant link, no floating routes will be added.
+</Note>
+
+---
+
+## OSPF
+
+OSPF is the default protocol for `star` and `three_router_triangle` templates. All networks are placed in **area 0** and a `router-id` is set to the first interface IP of each router for deterministic adjacency.
+
+### Generated IOS Commands
+
+```text
+router ospf {process_id}
+ router-id {first_interface_ip}
+ network {network_address} {wildcard_mask} area 0
+ exit
+```
+
+**Example — R1 with two interfaces:**
+
+```text
+router ospf 1
+ router-id 192.168.0.1
+ network 192.168.0.0 0.0.0.255 area 0
+ network 10.0.0.0 0.0.0.3 area 0
+ exit
+```
+
+The wildcard mask is computed as the bitwise inverse of the subnet mask — for a `/24` it is `0.0.0.255`, for a `/30` it is `0.0.0.3`.
+
+---
+
+## EIGRP
+
+EIGRP is the default for the `hub_spoke` template. The AS number defaults to `100` and is configurable via `eigrp_as`. `no auto-summary` is always emitted to ensure classless operation.
+
+### Generated IOS Commands
+
+```text
+router eigrp {as_number}
+ network {network_address} {wildcard_mask}
+ no auto-summary
+ exit
+```
+
+**Example — R2 with LAN and WAN interfaces:**
+
+```text
+router eigrp 100
+ network 192.168.1.0 0.0.0.255
+ network 10.0.0.0 0.0.0.3
+ no auto-summary
+ exit
+```
+
+---
+
+## RIP v2
+
+RIP v2 advertises classless networks. `no auto-summary` is always added and `version 2` is always set. Network statements use the network address (no wildcard in RIP).
+
+### Generated IOS Commands
+
+```text
+router rip
+ version 2
+ network {network_address}
+ no auto-summary
+ exit
+```
+
+**Example — R1 with LAN and WAN link:**
+
+```text
+router rip
+ version 2
+ network 192.168.0.0
+ network 10.0.0.0
+ no auto-summary
+ exit
+```
+
+<Note>
+RIP v2 uses classful network statements (no wildcard mask), which differs from OSPF and EIGRP. The generator correctly emits just the network address without a wildcard.
+</Note>
+
+---
+
+## Protocol Comparison
+
+| Feature | Static | OSPF | EIGRP | RIP v2 |
+|---|---|---|---|---|
+| IOS keyword | `ip route` | `router ospf` | `router eigrp` | `router rip` |
+| Admin distance | 1 | 110 | 90 | 120 |
+| Wildcard mask | — | ✅ | ✅ | ❌ |
+| `no auto-summary` | — | — | ✅ | ✅ |
+| Floating backup | ✅ (AD 254) | — | — | — |
+| Default template | most | `star`, triangle | `hub_spoke` | manual |
+
+## Multi-Hop Static Route Resolution
+
+For topologies with more than 2 routers, static routing uses **Breadth-First Search** over the router adjacency graph to find the correct first-hop neighbor toward each destination LAN. This ensures that R1 in a 4-router chain correctly routes to R4's LAN via R2 as next-hop, not directly to R4.
+
+```
+R1 ── R2 ── R3 ── R4
+```
+
+Generated on R1:
+
+```text
+ip route 192.168.3.0 255.255.255.0 10.0.0.2   ! via R2
+ip route 192.168.4.0 255.255.255.0 10.0.0.2   ! via R2 (R2 forwards onward)
+```

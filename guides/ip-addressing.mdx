@@ -1,0 +1,96 @@
+---
+title: "Automatic IP Addressing and DHCP Pool Generation"
+sidebarTitle: "IP Addressing"
+description: "How MCP Packet Tracer auto-assigns /24 LAN subnets, /30 inter-router WAN links, and DHCP pools with gateway at .1 and sequential host IPs from .2."
+---
+
+MCP Packet Tracer eliminates all manual IP configuration. The moment a `TopologyRequest` is processed, the IP planner walks every link in the topology graph, assigns subnet blocks sequentially from two reserved ranges, configures every router interface and end-device IP, and generates a DHCP pool for each LAN — all before a single IOS command is written. You describe what devices you want; the planner decides where every address goes.
+
+## Addressing Scheme
+
+Two non-overlapping address spaces are used. LAN subnets are carved from `192.168.0.0/16` and inter-router WAN links from `10.0.0.0/16`. Both are allocated sequentially — the first LAN gets `192.168.0.0/24`, the second gets `192.168.1.0/24`, and so on.
+
+| Network Role | Base | Block Size | Usable Hosts |
+|---|---|---|---|
+| LAN subnets | `192.168.0.0/16` | `/24` | 254 hosts per LAN |
+| Inter-router WAN links | `10.0.0.0/16` | `/30` | 2 hosts per link |
+
+## Assignment Rules
+
+<Steps>
+  <Step title="Gateway at .1">
+    The first usable host address in every LAN subnet (`.1`) is always assigned to the router interface connecting to that LAN. For `192.168.0.0/24`, the router gets `192.168.0.1`.
+  </Step>
+  <Step title="Sequential host IPs from .2">
+    PCs, Laptops, and Servers connected to the same switch receive consecutive IPs starting at `.2`. In a LAN with two PCs: `192.168.0.2` and `192.168.0.3`.
+  </Step>
+  <Step title="WAN links use /30 blocks">
+    Each router-to-router link consumes one `/30` block from `10.0.0.0/16`. The lower-indexed router gets `.1` and the higher gets `.2` within the block.
+  </Step>
+  <Step title="Default gateway set on all end devices">
+    Every PC, Laptop, and Server has its `gateway` field set to the `.1` address of its LAN subnet automatically.
+  </Step>
+</Steps>
+
+## Concrete Example — 2 Routers, 2 LANs
+
+The canonical two-router topology with two switches and four PCs produces this addressing:
+
+```
+LAN 1: 192.168.0.0/24
+  R1  GigabitEthernet0/0 → 192.168.0.1
+  PC1 FastEthernet0      → 192.168.0.2
+  PC2 FastEthernet0      → 192.168.0.3
+
+LAN 2: 192.168.1.0/24
+  R2  GigabitEthernet0/0 → 192.168.1.1
+  PC3 FastEthernet0      → 192.168.1.2
+  PC4 FastEthernet0      → 192.168.1.3
+
+WAN Link: 10.0.0.0/30
+  R1  GigabitEthernet0/1 → 10.0.0.1
+  R2  GigabitEthernet0/1 → 10.0.0.2
+```
+
+## DHCP Pool Generation
+
+When `dhcp: true` (the default), the IP planner creates one DHCP pool per LAN subnet on the router that owns that subnet's gateway address. The gateway IP is excluded from the pool so it is never handed out to a client.
+
+**IOS commands generated for R1's LAN:**
+
+```text
+ip dhcp excluded-address 192.168.0.1 192.168.0.1
+
+ip dhcp pool LAN_R1_0
+ network 192.168.0.0 255.255.255.0
+ default-router 192.168.0.1
+ dns-server 8.8.8.8
+ exit
+```
+
+| Field | Value | Notes |
+|---|---|---|
+| Pool name | `LAN_{router}_{index}` | e.g., `LAN_R1_0`, `LAN_R2_0` |
+| Network | LAN subnet address | e.g., `192.168.0.0` |
+| Mask | `255.255.255.0` | Always `/24` for LANs |
+| Default router | Gateway IP (`.1`) | Excluded from pool range |
+| DNS server | `8.8.8.8` | Google Public DNS — always set |
+| Excluded range | Gateway to gateway | Only the `.1` address is excluded |
+
+## Overriding Defaults
+
+IP assignment is **fully automatic**. Custom subnet ranges are not supported through the standard planning flow — every address is derived algorithmically from the two base networks. The base networks themselves can be changed by passing `base_network` and `inter_router_network` in the request if you need a different private range.
+
+<Note>
+The DNS server defaults to `8.8.8.8` for all DHCP pools. This is a constant defined in `shared/constants.py` (`DEFAULT_DNS = "8.8.8.8"`). In a real deployment, you would change this to your internal DNS server's IP after exporting the configs.
+</Note>
+
+## WAN Cloud Links
+
+When a topology includes a WAN Cloud node (`has_wan: true`), the last router in the chain receives an additional `/30` WAN-facing address from the `10.0.0.0/16` range. Only the router-side interface is assigned; the Cloud-PT device does not receive an IP.
+
+## Related Reference
+
+<Card title="Device Catalog" icon="book" href="/reference/device-catalog">
+  Full list of device categories that receive IPs — routers, PCs, laptops, and servers
+</Card>

@@ -1,0 +1,113 @@
+---
+title: "Install Expansion Modules on Routers at Runtime"
+sidebarTitle: "Expansion Modules"
+description: "Hot-install HWIC, NIM, NM, and WIC expansion modules on Cisco routers already placed in the Packet Tracer canvas using pt_add_module and pt_install_modules_batch."
+---
+
+No router model in Packet Tracer ships with Serial ports by default — they must be added through expansion modules before any serial WAN links can be drawn. More broadly, expansion modules let you add serial interfaces, additional Ethernet ports, and wireless adapters to routers already placed on the canvas at runtime. The MCP server powers the device off, installs the module in the specified slot, and powers the device back on automatically — no manual shutdown in the PT GUI required.
+
+## Execution Order
+
+PTBuilder enforces a strict ordering of operations: a module must be installed **after** the device is placed and **before** any links are drawn to ports that the module provides. Violating this order causes link creation to fail because the ports don't exist yet.
+
+```javascript
+addDevice("R1", "2911", 100, 100);        // 1. Place the device
+addModule("R1", "0/0", "HWIC-2T");        // 2. Install the module (adds Serial ports)
+addLink("R1", "Serial0/0/0", "R2", "Serial0/0/0", "serial");  // 3. Draw the link
+```
+
+The MCP generator always emits `addModule()` calls between the `addDevice()` block and the `addLink()` block to respect this constraint.
+
+## Slot Addressing
+
+Slot identifiers are **strings**, not integers. The format differs by module family.
+
+| Module Family | Valid Slot Strings | Router Models |
+|---|---|---|
+| HWIC | `"0/0"`, `"0/1"`, `"0/2"`, `"0/3"` | 1941, 2901, 2911 |
+| NIM | `"0"`, `"1"` | ISR4321, ISR4331 |
+| NM | `"1"`, `"2"` | Router-PT, 2811, 2620XM, 2621XM |
+
+<Warning>
+For HWIC slots, `"0/0"` and `0` address **different slots**. Always use the string form `"0/0"` to match PT's internal slot semantics. Integers are accepted and auto-coerced, but prefer explicit string literals.
+</Warning>
+
+<Note>
+ISR G2 routers (1941, 2901, 2911) do **not** have NM slots — only HWIC and SM. To get 4 serial ports on a 2911, install two `HWIC-2T` modules in slots `"0/0"` and `"0/1"`.
+</Note>
+
+## Automatic Serial Module Selection
+
+When the planner detects that serial links are required, it automatically selects and installs the correct module for the router model. You never need to specify serial modules manually for planned topologies.
+
+| Router Model | Auto-Selected Module | Ports Added |
+|---|---|---|
+| `1941` | `HWIC-2T` | `Serial0/0/0`, `Serial0/0/1` |
+| `2901` | `HWIC-2T` | `Serial0/0/0`, `Serial0/0/1` |
+| `2911` | `HWIC-2T` | `Serial0/0/0`, `Serial0/0/1` |
+| `ISR4321` | `NIM-2T` | `Serial0/1/0`, `Serial0/1/1` |
+| `ISR4331` | `NIM-2T` | `Serial0/1/0`, `Serial0/1/1` |
+
+## Key Modules Reference
+
+| Module | Slot Type | Ports Added | Description |
+|---|---|---|---|
+| `HWIC-2T` | HWIC | `Serial0/0/0`, `Serial0/0/1` | 2-port serial WAN — most common |
+| `HWIC-4ESW` | HWIC | `Fa0/1/0`–`Fa0/1/3` | 4-port Ethernet switch |
+| `HWIC-1GE-SFP` | HWIC | `GigabitEthernet0/0/0` | 1-port GigE SFP uplink |
+| `HWIC-8A` | HWIC | `Async0/0/0`–`Async0/0/7` | 8-port async serial |
+| `WIC-1T` | WIC | `Serial0/0/0` | 1-port serial |
+| `WIC-2T` | WIC | `Serial0/0/0`, `Serial0/0/1` | 2-port serial |
+| `NIM-2T` | NIM | `Serial0/1/0`, `Serial0/1/1` | 2-port serial for ISR 4000 series |
+| `NIM-ES2-4` | NIM | `Gig0/1/0`–`Gig0/1/3` | 4-port GE Layer 2 for ISR 4000 |
+| `NM-1FE-TX` | NM | `FastEthernet1/0` | 1-port FastEthernet copper |
+| `NM-4E` | NM | `Eth1/0`–`Eth1/3` | 4-port Ethernet |
+| `NM-4A/S` | NM | `Serial1/0`–`Serial1/3` | 4-port serial (legacy routers only) |
+| `NM-ESW-161` | NM | `Fa1/0`–`Fa1/15` | 16-port Ethernet switch module |
+
+## `pt_add_module` vs `pt_install_modules_batch`
+
+<CardGroup cols={2}>
+  <Card title="pt_add_module" icon="puzzle-piece">
+    Installs a **single module** in one call. Validates module existence, slot format,
+    device presence in PT, and model compatibility before sending. Each call triggers a
+    full power-cycle of the device.
+  </Card>
+  <Card title="pt_install_modules_batch" icon="layer-group">
+    Installs **N modules across one or more devices** in a single power-cycle.
+    Strongly recommended when installing multiple modules — avoids the per-call
+    power-on delay that can time out the bridge bootstrap.
+  </Card>
+</CardGroup>
+
+<Tip>
+Use `pt_install_modules_batch` whenever you need more than one module. Installing 2 × `HWIC-2T` on a 2911 via `pt_add_module` requires two separate power-cycles; the same operation via batch completes in one.
+</Tip>
+
+### Batch Example
+
+```json
+{
+  "modules": [
+    { "device": "R1", "slot": "0/0", "module": "HWIC-2T" },
+    { "device": "R1", "slot": "0/1", "module": "HWIC-2T" },
+    { "device": "R2", "slot": "0/0", "module": "HWIC-2T" }
+  ]
+}
+```
+
+This installs four serial ports on R1 and two on R2 in a single bridge transaction.
+
+## Listing Available Modules
+
+Use `pt_list_modules` to browse the full catalog of 151 modules, with optional filtering by router model or category:
+
+```json
+{ "router_model": "2911" }
+```
+
+```json
+{ "category": "router_hwic" }
+```
+
+Valid category values: `router_nm`, `router_hwic`, `router_nim`, `router_wic`, `pt_router_nm`, `sfp`, and more.

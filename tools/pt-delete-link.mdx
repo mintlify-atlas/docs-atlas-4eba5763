@@ -1,0 +1,61 @@
+---
+title: "pt_delete_link: Remove a Cable from Packet Tracer"
+sidebarTitle: "pt_delete_link"
+description: "pt_delete_link removes the cable connected to a specific interface on a device in the active Packet Tracer topology via the HTTP bridge."
+---
+
+`pt_delete_link` sends a `deleteLink(deviceName, interfaceName)` call to the Packet Tracer Script Engine via the HTTP bridge. It removes the cable that is connected to the specified interface, freeing both endpoints. Unlike `pt_delete_device` — which removes the entire device along with all its cables — `pt_delete_link` is a surgical operation that removes a single connection while leaving both devices and their other interfaces intact.
+
+## Parameters
+
+<ParamField body="device_name" type="string" required>
+  The exact name of the device that owns the interface. Examples: `"R1"`, `"SW2"`, `"PC3"`. Use `pt_query_topology` to confirm the exact device name.
+</ParamField>
+
+<ParamField body="interface_name" type="string" required>
+  The full interface name as used in Packet Tracer. Examples: `"GigabitEthernet0/0"`, `"GigabitEthernet0/1"`, `"FastEthernet0/1"`, `"Serial0/0/0"`. The name must match PT's internal representation exactly.
+</ParamField>
+
+## Return value
+
+<ResponseField name="result" type="string">
+  On success: `"Enlace en {device_name}/{interface_name} eliminado."`.
+
+  On failure: `"Error: {reason}"` where reason is the message from PT's Script Engine, along with a note suggesting `pt_delete_device` as a fallback if the `deleteLink` method is not available in the PT version.
+
+  If PT does not respond within 8 seconds: `"Sin respuesta de PT."`.
+</ResponseField>
+
+<Note>
+  Removing a link by specifying one endpoint is sufficient — you do not need to call `pt_delete_link` on both devices. Packet Tracer deletes the cable from both sides when you specify either endpoint. Calling the tool twice on the same link (once per endpoint) will result in a "link not found" error on the second call.
+</Note>
+
+## Example
+
+Remove the cable between R1's `GigabitEthernet0/1` and R2:
+
+```
+pt_delete_link("R1", "GigabitEthernet0/1")
+```
+
+Remove a serial link by specifying the serial interface:
+
+```
+pt_delete_link("R1", "Serial0/0/0")
+```
+
+## Use cases
+
+**Replace a wrong cable type** — if a straight-through cable was placed where a crossover is needed, delete the link and redeploy with the corrected cable type via `pt_send_raw` or a new `pt_live_deploy`.
+
+**Disconnect a device without removing it** — if you want to isolate a PC or router from the topology temporarily (e.g. to test failover behavior), remove its uplink interface without deleting the device.
+
+**Clean up after a partial deploy** — if `pt_live_deploy` was interrupted mid-way and some cables were drawn incorrectly, use `pt_delete_link` to remove individual bad connections.
+
+## Bridge requirement
+
+`pt_delete_link` requires the HTTP bridge to be active and PTBuilder to be polling. The call uses a bidirectional round-trip with an 8-second timeout. Call `pt_bridge_status` to verify the connection before using this tool.
+
+<Warning>
+  Link deletion is permanent via MCP — there is no undo. If you need to recover a deleted link, use `pt_send_raw` to send a `lwAddLink(...)` call manually, or redeploy the full topology with `pt_live_deploy`.
+</Warning>

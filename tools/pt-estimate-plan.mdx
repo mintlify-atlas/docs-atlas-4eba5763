@@ -1,0 +1,149 @@
+---
+title: "pt_estimate_plan: Dry-Run Topology Cost Estimation"
+sidebarTitle: "pt_estimate_plan"
+description: "pt_estimate_plan performs a dry-run from a natural-language request and returns device, link, and config counts without generating the full plan."
+---
+
+`pt_estimate_plan` is a lightweight dry-run tool that computes the expected size of a topology — number of devices by category, number of links by type, number of routing and DHCP configuration blocks — without running the full planning pipeline. No `TopologyPlan` is generated, no IP addresses are assigned, and no validation is performed. This makes it ideal for quickly gauging the scale and complexity of a proposed network before committing to a full `pt_plan_topology` or `pt_full_build` call.
+
+## Parameters
+
+`pt_estimate_plan` accepts the same structural parameters as `pt_plan_topology`. These describe the topology shape; the estimator uses them to compute counts arithmetically rather than building the full model.
+
+<ParamField query="routers" type="integer" default="2">
+  Number of routers. Accepts 1 to 20.
+</ParamField>
+
+<ParamField query="pcs_per_lan" type="integer" default="3">
+  Number of PCs per LAN (applied uniformly across all LANs).
+</ParamField>
+
+<ParamField query="laptops_per_lan" type="integer" default="0">
+  Number of laptops per LAN.
+</ParamField>
+
+<ParamField query="switches_per_router" type="integer" default="1">
+  Number of access switches per router (0 to 4).
+</ParamField>
+
+<ParamField query="servers" type="integer" default="0">
+  Number of server hosts.
+</ParamField>
+
+<ParamField query="access_points" type="integer" default="0">
+  Number of access points — capped at one per router.
+</ParamField>
+
+<ParamField query="has_wan" type="boolean" default="false">
+  Whether a WAN cloud node is included.
+</ParamField>
+
+<ParamField query="dhcp" type="boolean" default="true">
+  Whether DHCP pools will be generated.
+</ParamField>
+
+<ParamField query="routing" type="string" default="static">
+  Routing protocol (`static`, `ospf`, `eigrp`, `rip`, `none`). Used to estimate the number of routing config blocks.
+</ParamField>
+
+## Returns
+
+<ResponseField name="devices" type="object">
+  Device counts broken down by category:
+  - `routers` — number of routers
+  - `switches` — total switches (`routers × switches_per_router`)
+  - `pcs` — total PCs
+  - `laptops` — total laptops
+  - `access_points` — total APs (capped at `routers`)
+  - `servers` — total servers
+  - `clouds` — 1 if `has_wan` is true, otherwise 0
+  - `total` — sum of all above
+</ResponseField>
+
+<ResponseField name="links" type="object">
+  Link counts broken down by connection type:
+  - `router_to_router` — chain links between routers (`routers - 1`)
+  - `router_to_switch` — one per switch
+  - `switch_to_pc` — one per PC
+  - `switch_to_laptop` — one per laptop
+  - `switch_to_access_point` — one per AP
+  - `switch_to_server` — one per server
+  - `router_to_cloud` — 1 if `has_wan`, otherwise 0
+  - `total` — sum of all above
+</ResponseField>
+
+<ResponseField name="configs" type="object">
+  Estimated configuration block counts:
+  - `routers_to_configure` — number of routers that will receive IOS config
+  - `dhcp_pools` — number of DHCP pools (equals `routers` when `dhcp` is true)
+  - `static_routes` — estimated count of `ip route` statements (`router_links × 2`)
+  - `ospf_configs` / `rip_configs` / `eigrp_configs` — non-zero only for the selected routing protocol
+  - `floating_routes` — `"yes (backup via alternate paths)"` or `"no"`
+</ResponseField>
+
+<ResponseField name="subnets" type="object">
+  - `lan_subnets` — number of /24 LAN subnets (equals `routers`)
+  - `link_subnets` — number of /30 point-to-point subnets (equals `router_links + wan_link`)
+</ResponseField>
+
+<ResponseField name="complexity" type="string">
+  A qualitative complexity rating: `"simple"`, `"moderada"`, `"compleja"`, or `"muy compleja"`. Computed from a weighted score of routers, hosts, routing protocol, WAN, and floating routes.
+</ResponseField>
+
+## Example
+
+**Request** — estimate a 3-router OSPF topology with 2 PCs per LAN and a WAN cloud:
+
+```json
+{
+  "routers": 3,
+  "pcs_per_lan": 2,
+  "switches_per_router": 1,
+  "has_wan": true,
+  "dhcp": true,
+  "routing": "ospf"
+}
+```
+
+**Estimated output:**
+
+```json
+{
+  "devices": {
+    "routers": 3,
+    "switches": 3,
+    "pcs": 6,
+    "laptops": 0,
+    "access_points": 0,
+    "servers": 0,
+    "clouds": 1,
+    "total": 13
+  },
+  "links": {
+    "router_to_router": 2,
+    "router_to_switch": 3,
+    "switch_to_pc": 6,
+    "switch_to_laptop": 0,
+    "switch_to_access_point": 0,
+    "switch_to_server": 0,
+    "router_to_cloud": 1,
+    "total": 12
+  },
+  "configs": {
+    "routers_to_configure": 3,
+    "dhcp_pools": 3,
+    "static_routes": 0,
+    "ospf_configs": 3,
+    "rip_configs": 0,
+    "eigrp_configs": 0,
+    "floating_routes": "no"
+  },
+  "subnets": {
+    "lan_subnets": 3,
+    "link_subnets": 3
+  },
+  "complexity": "moderada"
+}
+```
+
+This tells you the full build will place 13 devices, create 12 links, and configure OSPF on 3 routers — before spending any time on planning or generating scripts. Use this information to sanity-check your parameters or compare the scale of different topology options.

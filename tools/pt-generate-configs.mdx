@@ -1,0 +1,95 @@
+---
+title: "pt_generate_configs: Generate IOS CLI Config Blocks"
+sidebarTitle: "pt_generate_configs"
+description: "pt_generate_configs produces per-device IOS CLI configuration blocks from a TopologyPlan, covering interfaces, DHCP, OSPF, EIGRP, RIP, and static routes."
+---
+
+`pt_generate_configs` reads a validated `TopologyPlan` and generates complete, copy-paste-ready IOS CLI configuration blocks for every router and switch in the topology. Each block starts from `enable` / `configure terminal`, configures all interfaces with their assigned IP addresses and `no shutdown`, builds DHCP pools, and adds the full routing protocol configuration — all derived automatically from the plan's IP assignments and routing settings. PC, laptop, and server configurations are appended as human-readable IP/gateway summaries.
+
+## Parameters
+
+<ParamField body="plan_json" type="string" required>
+  The `TopologyPlan` JSON produced by `pt_plan_topology` or `pt_full_build`. The plan must contain at least one device with interfaces or routing configuration for meaningful output.
+</ParamField>
+
+## Return value
+
+<ResponseField name="configs" type="string">
+  A formatted string containing one labeled section per device. Each router section is a full IOS CLI block. Each PC / server / laptop section shows the static IP or DHCP instruction. Sections are separated by `=== DeviceName ===` headers.
+</ResponseField>
+
+## What configs cover
+
+Each router config block includes every applicable section in this order:
+
+| Section | IOS commands generated |
+|---------|------------------------|
+| **Interface IPs** | `interface {iface}`, `ip address {ip} {mask}`, `no shutdown`, `exit` |
+| **DHCP exclusions** | `ip dhcp excluded-address {start} {end}` |
+| **DHCP pools** | `ip dhcp pool {name}`, `network`, `default-router`, `dns-server` |
+| **Static routes** | `ip route {dest} {mask} {next_hop} [AD]` |
+| **OSPF** | `router ospf {pid}`, `router-id`, `network {net} {wildcard} area {area}` |
+| **EIGRP** | `router eigrp {as}`, `network {net} {wildcard}`, `no auto-summary` |
+| **RIP** | `router rip`, `version 2`, `network {net}`, `no auto-summary` |
+| **Persistence** | `end`, `write memory` |
+
+Switch configs include only `hostname` and `write memory` — L2 switches carry no IP routing configuration by default.
+
+## Example config block
+
+The following block is representative output for a router running OSPF with a DHCP pool on its LAN interface:
+
+```
+R1# configure terminal
+hostname R1
+no ip domain-lookup
+
+interface GigabitEthernet0/0
+ ip address 192.168.0.1 255.255.255.0
+ no shutdown
+ exit
+
+interface GigabitEthernet0/1
+ ip address 10.0.0.1 255.255.255.252
+ no shutdown
+ exit
+
+ip dhcp excluded-address 192.168.0.1 192.168.0.1
+ip dhcp pool LAN1
+ network 192.168.0.0 255.255.255.0
+ default-router 192.168.0.1
+ dns-server 8.8.8.8
+ exit
+
+router ospf 1
+ router-id 1.1.1.1
+ network 192.168.0.0 0.0.0.255 area 0
+ network 10.0.0.0 0.0.0.3 area 0
+ exit
+
+end
+write memory
+```
+
+## PC and host configurations
+
+For end devices (PC-PT, Laptop-PT, Server-PT), the tool generates a plain-text summary rather than IOS commands, because Packet Tracer configures PCs through a graphical IP Configuration panel, not a CLI. The summary shows:
+
+```
+--- PC1 ---
+IP Address: 192.168.0.2
+Subnet Mask: 255.255.255.0
+Default Gateway: 192.168.0.1
+DNS Server: 8.8.8.8
+Configurar como DHCP para obtener IP automáticamente.
+```
+
+When the plan includes DHCP pools, the summary instructs you to set the PC to DHCP mode; otherwise it provides static IP values to enter manually.
+
+## Relationship to `pt_export`
+
+`pt_generate_configs` returns the configs as an in-memory string. `pt_export` calls the same generator internally and writes the output to disk — one `{DeviceName}_config.txt` file per router or switch in the project directory. Use `pt_export` when you need persistent files on disk; use `pt_generate_configs` when you want to inspect or forward the configs without writing files.
+
+<Tip>
+  Pass the same `plan_json` to both `pt_generate_script` and `pt_generate_configs` to get the full PTBuilder script and all device configs independently — useful when you want to apply configs manually after auto-building the topology.
+</Tip>

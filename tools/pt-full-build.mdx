@@ -1,0 +1,179 @@
+---
+title: "pt_full_build: All-in-One Network Build Pipeline"
+sidebarTitle: "pt_full_build"
+description: "pt_full_build runs the complete plan → validate → fix → generate → explain → estimate pipeline in one call and returns a human-readable deployment report."
+---
+
+`pt_full_build` is the single-call shortcut for the entire MCP Packet Tracer pipeline. Given the same parameters as `pt_plan_topology`, it internally runs planning, validation, auto-fixing, PTBuilder script generation, IOS CLI config generation, natural-language explanation, and estimation — and returns everything in one formatted, human-readable report. It is the fastest way to go from a topology description to a complete, copy-pasteable build package, and it optionally copies the PTBuilder script directly to the Windows clipboard.
+
+## Parameters
+
+`pt_full_build` accepts the same parameters as `pt_plan_topology` plus two additional control flags:
+
+<ParamField query="routers" type="integer" default="2">
+  Number of routers (1 to 20).
+</ParamField>
+
+<ParamField query="pcs_per_lan" type="integer" default="3">
+  Number of PCs per LAN.
+</ParamField>
+
+<ParamField query="laptops_per_lan" type="integer" default="0">
+  Number of laptops per LAN.
+</ParamField>
+
+<ParamField query="switches_per_router" type="integer" default="1">
+  Number of access switches per router (0 to 4).
+</ParamField>
+
+<ParamField query="servers" type="integer" default="0">
+  Number of server hosts.
+</ParamField>
+
+<ParamField query="access_points" type="integer" default="0">
+  Number of wireless access points.
+</ParamField>
+
+<ParamField query="has_wan" type="boolean" default="false">
+  Include a WAN cloud node connected to the last router.
+</ParamField>
+
+<ParamField query="dhcp" type="boolean" default="true">
+  Generate DHCP pools on all routers.
+</ParamField>
+
+<ParamField query="routing" type="string" default="static">
+  Routing protocol: `static`, `ospf`, `eigrp`, `rip`, or `none`.
+</ParamField>
+
+<ParamField query="router_model" type="string" default="2911">
+  Router model: `1941`, `2901`, `2911`, or `ISR4321`.
+</ParamField>
+
+<ParamField query="switch_model" type="string" default="2960-24TT">
+  Switch model: `2960-24TT` or `3560-24PS`.
+</ParamField>
+
+<ParamField query="template" type="string" default="multi_lan">
+  Topology template: `single_lan`, `multi_lan`, `multi_lan_wan`, `star`, `hub_spoke`, `branch_office`, `router_on_a_stick`, `three_router_triangle`, or `custom`.
+</ParamField>
+
+<ParamField query="deploy" type="boolean" default="true">
+  When `true`, copies the PTBuilder JS script to the Windows clipboard and exports project files to the `projects/` directory. Also generates step-by-step paste instructions for Packet Tracer.
+</ParamField>
+
+<ParamField query="floating_routes" type="boolean" default="false">
+  Add floating backup static routes with administrative distance 254.
+</ParamField>
+
+<ParamField query="ospf_process_id" type="integer" default="1">
+  OSPF process ID (1 to 65535).
+</ParamField>
+
+<ParamField query="eigrp_as" type="integer" default="100">
+  EIGRP autonomous system number (1 to 65535).
+</ParamField>
+
+## What It Runs Internally
+
+`pt_full_build` executes the following pipeline in a single call:
+
+```
+pt_plan_topology   →  builds the TopologyPlan
+pt_validate_plan   →  checks for errors and warnings
+pt_fix_plan        →  auto-corrects cables, ports, model upgrades
+pt_generate_script →  produces the PTBuilder JS script
+pt_generate_configs →  produces per-device IOS CLI blocks
+pt_explain_plan    →  generates the human-readable summary
+pt_estimate_plan   →  computes device/link/config counts
+```
+
+If `deploy=True`, it also copies the script to the clipboard and writes project files.
+
+## Returns
+
+`pt_full_build` returns a single formatted text report divided into labeled sections:
+
+| Section | Contents |
+|---------|----------|
+| `RESUMEN DE TOPOLOGÍA` | Device count, link count, DHCP pool count, routing config counts |
+| Validation status | `✅ Validación: PASS` or per-error breakdown |
+| `EXPLICACIÓN` | Bullet-point natural-language plan explanation |
+| `TABLA DE DIRECCIONAMIENTO` | Per-device interface-to-IP mapping with gateways |
+| `SCRIPT PTBUILDER` | Complete PTBuilder JS (`addDevice`, `addModule`, `addLink`, `configureIosDevice`) |
+| `CONFIGURACIONES CLI` | Per-device IOS CLI configuration blocks |
+| `VERIFICACIONES SUGERIDAS` | Suggested ping tests to run post-deploy |
+| `DESPLIEGUE EN PACKET TRACER` | Clipboard status and paste instructions (when `deploy=True`) |
+| `PLAN JSON` | The full `TopologyPlan` JSON appended at the end for reference |
+
+<Warning>
+The output of `pt_full_build` is a **human-readable formatted report**, not machine-readable JSON. You cannot pass the output of `pt_full_build` directly as `plan_json` to `pt_live_deploy`, `pt_generate_configs`, or `pt_validate_plan`. If you need the raw JSON plan to drive downstream tools, use `pt_plan_topology` instead. The JSON plan is included at the bottom of the report under `PLAN JSON` for manual reference only.
+</Warning>
+
+## Example Output (2 Routers, Static Routing)
+
+The following is a condensed version of the summary sections returned for a `pt_full_build` call with `routers=2`, `pcs_per_lan=2`, `routing="static"`:
+
+```
+============================================================
+RESUMEN DE TOPOLOGÍA
+============================================================
+Dispositivos: 8
+Enlaces: 7
+DHCP Pools: 2
+Rutas estáticas: 4
+OSPF configs: 0
+RIP configs: 0
+EIGRP configs: 0
+
+✅ Validación: PASS
+
+============================================================
+EXPLICACIÓN
+============================================================
+• Topología con 2 router(s), 2 switch(es), 4 PC(s), 0 servidor(es).
+• Se asignaron 2 subredes /24 para LANs — cada LAN soporta hasta 254 hosts.
+• Los enlaces entre routers usan subredes /30 (punto a punto).
+• Se usan 1 cable(s) cruzado(s) entre routers.
+• Se usan 6 cable(s) directos entre dispositivos de diferente tipo.
+• Se configuraron 2 pool(s) DHCP — los PCs obtienen IP automáticamente.
+• Se configuraron 4 ruta(s) estática(s).
+
+============================================================
+TABLA DE DIRECCIONAMIENTO
+============================================================
+R1 (2911):
+  GigabitEthernet0/0: 192.168.0.1/24
+  GigabitEthernet0/1: 10.0.0.1/30
+R2 (2911):
+  GigabitEthernet0/0: 192.168.1.1/24
+  GigabitEthernet0/1: 10.0.0.2/30
+PC1: DHCP (Gateway: 192.168.0.1)
+PC2: DHCP (Gateway: 192.168.0.1)
+PC3: DHCP (Gateway: 192.168.1.1)
+PC4: DHCP (Gateway: 192.168.1.1)
+```
+
+This matches the README quick example:
+
+```
+Devices (8):  R1, R2 (2911), SW1, SW2 (2960-24TT), PC1, PC2, PC3, PC4 (PC-PT)
+Links   (7):  R1<->R2 (cross), R1<->SW1 (straight), R2<->SW2 (straight),
+              SW1<->PC1, SW1<->PC2, SW2<->PC3, SW2<->PC4 (all straight)
+
+IP Plan:
+  LAN 1:  192.168.0.0/24 -- R1 Gig0/0: .1, PC1: .2, PC2: .3
+  LAN 2:  192.168.1.0/24 -- R2 Gig0/0: .1, PC3: .2, PC4: .3
+  Link:   10.0.0.0/30    -- R1 Gig0/1: 10.0.0.1, R2 Gig0/1: 10.0.0.2
+```
+
+## When to Use `pt_full_build` vs. the Step-by-Step Pipeline
+
+| Use `pt_full_build` when... | Use the step-by-step pipeline when... |
+|----------------------------|--------------------------------------|
+| You want everything in one call | You need to inspect or modify the plan between stages |
+| You are presenting a build to a user | You need `plan_json` to pass to `pt_live_deploy` |
+| You want the clipboard deploy option | You want to validate independently of generation |
+| You are doing a quick demo or prototype | You are building a custom automation script |
+
+For live deployment via `pt_live_deploy`, always use `pt_plan_topology` to get the raw JSON plan, then pass that to `pt_live_deploy` directly.

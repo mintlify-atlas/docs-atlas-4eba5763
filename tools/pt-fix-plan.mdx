@@ -1,0 +1,101 @@
+---
+title: "pt_fix_plan: Auto-Fix Common Topology Errors"
+sidebarTitle: "pt_fix_plan"
+description: "pt_fix_plan automatically corrects wrong cables, missing ports, and router model mismatches in a TopologyPlan and returns the corrected plan JSON."
+---
+
+`pt_fix_plan` is the automatic repair tool in the MCP Packet Tracer pipeline. It takes a `TopologyPlan` JSON — typically one that has just been flagged by `pt_validate_plan` — and applies three sequential fix passes: correcting wrong cable types based on device categories, upgrading router models when they do not have enough GigabitEthernet ports for their declared links, and reassigning invalid port names to the first available valid port on each device. After all fixes are applied, the plan is re-validated internally and the corrected plan is returned alongside a list of every change made.
+
+## Parameter
+
+<ParamField body="plan_json" type="string" required>
+  The `TopologyPlan` serialized as a JSON string — the direct output of `pt_plan_topology` or `pt_validate_plan`. The tool does not require the plan to be valid before it starts; it attempts corrections regardless of the current error state.
+</ParamField>
+
+## What the Auto-Fixer Corrects
+
+### 1. Wrong Cable Types (`INVALID_CABLE_TYPE`)
+
+The fixer inspects every link and checks whether the cable type matches the expected type inferred from the two device categories. The inference rules mirror Cisco's real-world cabling guidelines:
+
+| Connection | Correct Cable |
+|-----------|---------------|
+| Router ↔ Router | `cross` (crossover) |
+| Router ↔ Switch | `straight` |
+| Router ↔ Cloud (WAN) | `straight` |
+| Router ↔ Firewall | `cross` |
+| Switch ↔ PC / Laptop / Server | `straight` |
+| Switch ↔ Access Point | `straight` |
+| Switch ↔ Switch | `cross` |
+
+If the plan specifies `straight` for a router-to-router link, the fixer silently changes it to `cross` and records the change.
+
+### 2. Router Model Upgrades (`INSUFFICIENT_PORTS`)
+
+When a router has more links than its model's GigabitEthernet port count allows, the fixer upgrades the model to the `2911` (which has 3 GigabitEthernet ports). For example, a `1941` (2 GigE ports) used as a hub router in a triangle topology with 3 links will be upgraded automatically. The fix is recorded with the original model name and the number of ports required.
+
+### 3. Port Reassignment (`INVALID_PORT`)
+
+If a link references a port name that does not exist on the device model (e.g. `GigabitEthernet0/5` on a `2911` that only has `Gig0/0` through `Gig0/2`), the fixer replaces it with the first available port on that device that is not already used by another link.
+
+## Returns
+
+<ResponseField name="fixes_applied" type="array">
+  List of human-readable strings describing each correction that was applied. Empty if no changes were needed.
+</ResponseField>
+
+<ResponseField name="fixes_count" type="integer">
+  Total number of individual corrections applied.
+</ResponseField>
+
+<ResponseField name="is_valid" type="boolean">
+  `true` if the plan has no remaining errors after the fix passes.
+</ResponseField>
+
+<ResponseField name="plan" type="object">
+  The corrected `TopologyPlan` as a JSON object. Pass `JSON.stringify(result.plan)` (or the equivalent in your client) to downstream tools.
+</ResponseField>
+
+## Typical Fix Workflow
+
+The recommended pattern is to validate first, fix, then validate again to confirm:
+
+```
+pt_plan_topology(...)
+  → returns plan_json
+
+pt_validate_plan(plan_json)
+  → returns errors, is_valid = false
+
+pt_fix_plan(plan_json)
+  → returns { fixes_applied: [...], is_valid: true, plan: {...} }
+
+pt_validate_plan(fixed_plan_json)
+  → returns is_valid = true  ✅
+
+pt_generate_script(fixed_plan_json)
+  → PTBuilder JS ready to deploy
+```
+
+## Example Response
+
+```json
+{
+  "fixes_applied": [
+    "Cable corregido: R1↔R2 de 'straight' a 'cross'",
+    "Router R3 upgradeado de 1941 a 2911 (necesita 3 puertos GigE, 1941 solo tiene 2)",
+    "Puerto corregido: R2 de 'GigabitEthernet0/5' a 'GigabitEthernet0/2'"
+  ],
+  "fixes_count": 3,
+  "is_valid": true,
+  "plan": {
+    "name": "topology",
+    "devices": [ ... ],
+    "links": [ ... ]
+  }
+}
+```
+
+<Note>
+The auto-fixer handles the most common LLM-induced errors automatically: cable type confusion, port exhaustion on default router models, and off-by-one port indexing. It does not fix IP conflicts, subnet overlaps, or missing devices — those require re-planning with different parameters via `pt_plan_topology`.
+</Note>

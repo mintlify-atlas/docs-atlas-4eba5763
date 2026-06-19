@@ -1,0 +1,77 @@
+---
+title: "pt_explain_plan: Get a Human-Readable Plan Summary"
+sidebarTitle: "pt_explain_plan"
+description: "pt_explain_plan returns a natural-language explanation of every decision in a TopologyPlan — devices, links, IPs, routing, DHCP, and module choices."
+---
+
+`pt_explain_plan` translates the technical contents of a `TopologyPlan` JSON into a concise, human-readable bullet list. Rather than decoding raw JSON fields, it produces plain English sentences that describe why specific devices, cables, IP addresses, routing protocols, and DHCP pools were chosen. This is particularly useful when presenting a generated topology to non-technical stakeholders, reviewing a plan before committing to deployment, or debugging unexpected configurations produced by the planning pipeline.
+
+## Parameter
+
+<ParamField body="plan_json" type="string" required>
+  The `TopologyPlan` serialized as a JSON string — the direct output of `pt_plan_topology` or `pt_fix_plan`. The tool reads the plan structure and generates its explanation from the actual content, so the plan should be complete and validated before calling this tool for the most meaningful output.
+</ParamField>
+
+## Returns
+
+`pt_explain_plan` returns a plain-text string. Each line starts with a bullet (`•`) and covers one aspect of the plan. The output is suitable for display in a markdown renderer or chat interface.
+
+**Example output for a 2-router static topology:**
+
+```
+• Topología con 2 router(s), 2 switch(es), 4 PC(s), 0 servidor(es).
+• Se asignaron 2 subredes /24 para LANs — cada LAN soporta hasta 254 hosts.
+• Los enlaces entre routers usan subredes /30 (punto a punto) — ahorra direcciones IP usando solo 2 hosts por enlace.
+• Se usan 1 cable(s) cruzado(s) entre dispositivos del mismo tipo (router↔router, switch↔switch).
+• Se usan 6 cable(s) directos entre dispositivos de diferente tipo (router↔switch, switch↔PC).
+• Se configuraron 2 pool(s) DHCP — los PCs obtienen IP automáticamente.
+•   Pool 'DHCP_R1': red 192.168.0.0/255.255.255.0, gateway 192.168.0.1
+•   Pool 'DHCP_R2': red 192.168.1.0/255.255.255.0, gateway 192.168.1.1
+• Se configuraron 4 ruta(s) estática(s) — cada router sabe cómo alcanzar las LANs de los otros routers.
+• Verificaciones sugeridas: 1 (ej: ping PC1 → PC4)
+```
+
+## What the Explanation Covers
+
+### Device Placement
+
+The opening line summarizes the topology composition: how many routers, switches, PCs, and servers are in the plan, and whether a WAN cloud node is included.
+
+### Subnet Allocation
+
+The explainer identifies the number of `/24` LAN subnets assigned (one per router) and notes that each supports up to 254 hosts. It also detects `/30` point-to-point subnets on inter-router links and explains why they are used (minimizing address waste on two-host segments).
+
+### Cable Choices
+
+The explanation distinguishes crossover cables (used between same-category devices: router↔router, switch↔switch) from straight-through cables (used between different-category devices: router↔switch, switch↔PC/server/laptop). This mapping directly corresponds to Cisco's real-world cabling rules for Packet Tracer.
+
+### IP Assignments
+
+IP assignments are derived from the `interfaces` map on each `DevicePlan`. The explainer cross-references these with the subnet structure to explain addressing decisions in context.
+
+### Routing Configuration Rationale
+
+Depending on the routing protocol in the plan:
+- **Static** — reports how many primary routes were generated and whether floating backup routes (AD=254) are present.
+- **OSPF** — reports the process ID, the number of routers participating, and notes that LSA-based dynamic learning is used.
+- **RIP** — reports the version (always v2), the number of participating routers, and that `no auto-summary` is set.
+- **EIGRP** — reports the AS number, the number of participating routers, and notes the fast convergence characteristic.
+
+### DHCP Pool Details
+
+When DHCP pools are present, each pool is listed with its name, network, subnet mask, and gateway address.
+
+### Modules Installed
+
+If the plan includes expansion modules (e.g. `HWIC-2T` for serial ports), these are listed with the device name, slot, and module type.
+
+### Suggested Verifications
+
+If the plan includes `ValidationCheck` entries (auto-generated for ping tests between the first and last PC), these are summarized at the end.
+
+## When to Use
+
+- **Before deployment** — review the generated plan to verify the topology matches your intent before running `pt_live_deploy`.
+- **Presenting to stakeholders** — translate a machine-generated plan into clear sentences that non-networking engineers can understand.
+- **Debugging unexpected configurations** — if a routing protocol or IP range looks wrong, `pt_explain_plan` surfaces the rationale so you can adjust parameters and re-plan.
+- **Educational use** — understand why Packet Tracer uses specific cable types, subnet sizes, and routing configurations in each scenario.

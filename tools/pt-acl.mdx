@@ -1,0 +1,203 @@
+---
+title: "pt_apply_acl and pt_remove_acl: ACL Management"
+sidebarTitle: "pt_acl"
+description: "Reference for pt_apply_acl and pt_remove_acl — apply standard, extended, and named ACLs to live Cisco Packet Tracer routers via the HTTP bridge."
+---
+
+Access Control List tools let you define and bind traffic filters directly on routers that are already running in a live Packet Tracer topology. Three ACL types are supported: **standard** ACLs (filter by source IP only, numbers 1–99 and 1300–1999), **extended** ACLs (filter by source, destination, protocol, and ports, numbers 100–199 and 2000–2699), and **named** ACLs (any alphanumeric string, same expressive power as extended). ACLs are applied post-deploy via `configureIosDevice` over the HTTP bridge, or alternatively through the `AclProcess` object API (`pt_apply_acl_object`). Both tools run the same static validation pipeline before sending anything to Packet Tracer.
+
+---
+
+## pt\_apply\_acl
+
+Applies an ACL to a router in the active topology. The full pipeline is: build `ACLPlan` → static validation (number ranges, types, IPs/wildcards, unreachable rules) → dynamic validation against PT (router and interface exist) → generate IOS CLI → send via `configureIosDevice`.
+
+### Parameters
+
+<ParamField body="router" type="string" required>
+  The exact name of the router device in Packet Tracer, e.g. `"CORE-R1"`. Use `pt_query_topology` if you are unsure of the name.
+</ParamField>
+
+<ParamField body="name_or_number" type="string" required>
+  ACL identifier in IOS format:
+  - `"1"` – `"99"` → standard ACL
+  - `"100"` – `"199"` → extended ACL
+  - `"1300"` – `"1999"` → expanded standard range
+  - `"2000"` – `"2699"` → expanded extended range
+  - Any alphanumeric string (e.g. `"BLOCK_HTTP"`) → named ACL
+</ParamField>
+
+<ParamField body="acl_type" type="string" required>
+  `"standard"` or `"extended"`. Must be consistent with `name_or_number` when a numeric identifier is used — mismatches are caught by the validator and returned as errors before anything is sent to PT.
+</ParamField>
+
+<ParamField body="entries" type="array" required>
+  List of ACL rule objects. Each rule supports:
+
+  - `action` (string, required) — `"permit"` or `"deny"`
+  - `protocol` (string, default `"ip"`) — `"ip"`, `"icmp"`, `"tcp"`, `"udp"`, `"esp"`, `"ahp"`, `"gre"`, `"eigrp"`, `"ospf"`
+  - `source` (string, required) — `"any"`, `"host 10.0.0.1"`, or `"10.0.0.0 0.0.0.255"` (network + wildcard)
+  - `destination` (string, extended only) — same format as `source`
+  - `source_port_op` / `source_port` — port operator + number for TCP/UDP source port (e.g. `"eq"`, `80`)
+  - `dest_port_op` / `dest_port` / `dest_port_end` — destination port; use `"range"` with `dest_port_end`
+  - `icmp_type` (string) — ICMP message type, e.g. `"echo"`, `"echo-reply"`, `"host-unreachable"` (ICMP only)
+  - `tcp_flags` (array) — e.g. `["established"]`, `["syn"]` (TCP only)
+  - `log` (boolean) — append `log` keyword to the rule
+  - `remark` (string) — optional comment line inserted before the rule
+  - `sequence` (integer, optional) — explicit sequence number; auto-assigned in increments of 10 if omitted
+</ParamField>
+
+<ParamField body="binding_interface" type="string" optional>
+  Interface to bind the ACL to after it is defined, e.g. `"GigabitEthernet0/0"`. If omitted, the ACL is defined on the router but not applied to any interface.
+</ParamField>
+
+<ParamField body="binding_direction" type="string" default="in">
+  `"in"` or `"out"`. Only used when `binding_interface` is set.
+</ParamField>
+
+<ParamField body="dry_run" type="boolean" default="false">
+  When `true`, runs the full validation pipeline and returns the CLI lines and JS payload without sending anything to PT.
+</ParamField>
+
+### Validation rules
+
+The static validator (`validate_acl_plan`) enforces the following before any bridge call:
+
+| Rule | Detail |
+|---|---|
+| **Number range** | Numeric ACL IDs must fall in a valid IOS range. Numbers outside 1–99, 100–199, 1300–1999, 2000–2699 are rejected. |
+| **Type coherence** | A number in the extended range (100–199) declared as `acl_type="standard"` is an error, and vice versa. |
+| **Standard restrictions** | Standard ACLs may not include `destination`, port operators, TCP flags, or ICMP type — only `source` and `protocol="ip"`. |
+| **Port/protocol coherence** | Port operators (`source_port_op`, `dest_port_op`) are only valid for `protocol="tcp"` or `protocol="udp"`. |
+| **ICMP type/protocol coherence** | `icmp_type` is only valid when `protocol="icmp"`. |
+| **Wildcard/address format** | Every address must be `"any"`, `"host A.B.C.D"`, or `"A.B.C.D W.W.W.W"`. Invalid IPv4 values are flagged. |
+| **Duplicate sequence** | Two entries with the same explicit sequence number produce an error. |
+| **Unreachable rules** | A catch-all entry (`source="any"`, `protocol="ip"`) followed by more entries produces a warning for each unreachable rule. |
+| **Empty ACL** | An ACL with no entries is flagged — IOS applies an implicit `deny any`, which would block all traffic. |
+
+The dynamic validator (`validate_against_topology`) additionally confirms that `router` exists in the active PT canvas, and that `binding_interface` (if provided) exists on that router's model per the device catalog.
+
+### Return value
+
+```json
+{
+  "summary": "✅ ACL '101' valid (3 rules).\n📤 Applied on 'CORE-R1' via bridge (configureIosDevice).",
+  "valid": true,
+  "errors": [],
+  "warnings": [],
+  "cli_lines": ["access-list 101 deny icmp ...", "..."],
+  "js_payload": "configureIosDevice(\"CORE-R1\", \"...\");",
+  "sent": true,
+  "dry_run": false
+}
+```
+
+### Example: block HTTP from one subnet on CORE-R1
+
+```json
+{
+  "router": "CORE-R1",
+  "name_or_number": "101",
+  "acl_type": "extended",
+  "entries": [
+    {
+      "action": "deny",
+      "protocol": "tcp",
+      "source": "192.168.2.0 0.0.0.255",
+      "destination": "any",
+      "dest_port_op": "eq",
+      "dest_port": 80
+    },
+    {
+      "action": "permit",
+      "protocol": "ip",
+      "source": "any",
+      "destination": "any"
+    }
+  ],
+  "binding_interface": "GigabitEthernet0/1",
+  "binding_direction": "in"
+}
+```
+
+---
+
+## pt\_apply\_acl\_object
+
+An alternative backend that uses Packet Tracer's `AclProcess.addAcl` / `addStatement` object API instead of `configureIosDevice` CLI. The input parameters are identical to `pt_apply_acl`.
+
+This variant is faster (no IOS CLI parsing in PT) and less likely to trigger modal error popups if a statement has a minor issue. The tradeoff is that interface binding uses `port.setAclInID` / `setAclOutID`, which only works on base physical interfaces — not on sub-interfaces such as `GigabitEthernet0/0.20`. For sub-interface bindings, use `pt_apply_acl` (CLI backend).
+
+The additional parameter `replace_existing` (boolean, default `true`) causes the tool to call `ap.removeAcl(name)` before re-creating the ACL, ensuring a clean slate on repeated calls.
+
+---
+
+## pt\_remove\_acl
+
+Removes an ACL from a router, optionally clearing its interface binding first.
+
+### Parameters
+
+<ParamField body="router" type="string" required>
+  Exact router name in PT.
+</ParamField>
+
+<ParamField body="name_or_number" type="string" required>
+  Identifier of the ACL to remove, matching the value used when it was applied.
+</ParamField>
+
+<ParamField body="binding_interface" type="string" optional>
+  If the ACL was bound to an interface, specify it here so the `no ip access-group` command is generated before the `no access-list` removal. If omitted, only the ACL definition is removed.
+</ParamField>
+
+<ParamField body="binding_direction" type="string" default="in">
+  `"in"` or `"out"`. Only used when `binding_interface` is set.
+</ParamField>
+
+<ParamField body="dry_run" type="boolean" default="false">
+  Returns the removal payload without sending it to PT.
+</ParamField>
+
+### What gets removed
+
+When `binding_interface` is provided, the generated IOS payload contains:
+
+```
+interface GigabitEthernet0/0
+ no ip access-group 101 in
+!
+no access-list 101
+```
+
+Without `binding_interface`, only `no access-list 101` (or `no ip access-list extended BLOCK_HTTP` for named ACLs) is sent.
+
+### Return value
+
+```json
+{
+  "summary": "📤 ACL '101' removed on 'CORE-R1' via bridge.",
+  "router": "CORE-R1",
+  "acl_id": "101",
+  "js_payload": "configureIosDevice(\"CORE-R1\", \"...\");",
+  "sent": true,
+  "dry_run": false
+}
+```
+
+## pt\_remove\_acl\_object
+
+Counterpart to `pt_apply_acl_object`. Uses `AclProcess.removeAcl` and `port.setAclInID("")` / `port.setAclOutID("")` for removal. Parameters are identical to `pt_remove_acl`. Use this variant when the ACL was originally applied with `pt_apply_acl_object`.
+
+---
+
+## When to Use Each ACL Type
+
+| Type | Number Range | Filters On | Typical Use |
+|---|---|---|---|
+| **standard** | 1–99, 1300–1999 | Source IP only | Restrict which hosts can reach a segment; simple permit/deny per subnet |
+| **extended** | 100–199, 2000–2699 | Src + dst + protocol + ports | Block specific services (HTTP, FTP, ICMP) between specific subnets |
+| **named** | any string | Src + dst + protocol + ports (same as extended) | Production configs — easier to read, edit, and document |
+
+<Warning>
+  All ACL tools require the HTTP bridge to be active and Packet Tracer to be connected. Check status with `pt_bridge_status` before calling. If the bridge is up but PT is not connected, the tools run the full validation pipeline and return the CLI payload, but `sent` will be `false`.
+</Warning>

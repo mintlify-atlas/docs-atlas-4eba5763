@@ -1,0 +1,64 @@
+---
+title: "MCP Packet Tracer: Automate Cisco Networks with AI"
+sidebarTitle: "Introduction"
+description: "MCP Packet Tracer is an MCP server exposing 33 tools that let any LLM plan, validate, and deploy Cisco Packet Tracer topologies from natural language."
+---
+
+MCP Packet Tracer is a [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server that gives any LLM — GitHub Copilot, Claude, OpenAI Codex, and others — full programmatic control over Cisco Packet Tracer. Instead of manually placing devices, drawing cables, and typing IOS commands, you describe the network you want in plain English and the server handles the complete workflow: planning the topology, assigning IP addresses, generating PTBuilder JavaScript, validating the result against 24 typed error codes, and streaming every command directly into a running Packet Tracer instance over an HTTP bridge — no copy-pasting required.
+
+## Key Capabilities
+
+| | Feature | Details |
+|---|---------|---------|
+| **Planning** | Natural language to topology | One prompt produces a complete `TopologyPlan` with devices, links, IPs, and configs |
+| **IP Addressing** | Automatic /24 LANs + /30 WAN links | Sequential assignment; gateway always at `.1` on each subnet |
+| **DHCP** | Auto pool generation | One pool per LAN with the gateway address excluded from the range |
+| **Routing** | Static / OSPF / EIGRP / RIP | Full IOS command generation for all four IGPs |
+| **Validation** | 24 typed error codes + auto-fixer | Wrong cables, missing ports, incompatible modules — detected and corrected automatically |
+| **ACL** | Standard, extended, and named ACLs | Apply, bind, and remove ACLs on live routers via the bridge |
+| **NAT / PAT** | Static NAT, dynamic NAT, PAT overload | Translate addresses on live routers; three modes map directly to CCNA NAT variants |
+| **Live Deploy** | Real-time HTTP bridge to Packet Tracer | Commands stream directly into PT's Script Engine — no clipboard, no paste |
+| **Export** | Plans, JS scripts, CLI configs to disk | Reusable project files for offline or batch workflows |
+| **Catalog** | 74 devices · 151 modules · 15 cables | 34 categories, 101 aliases the LLM can reference by common name |
+
+## Explore the Documentation
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Install the server, connect your MCP client, and deploy your first topology in under five minutes.
+  </Card>
+  <Card title="How It Works" icon="diagram-project" href="/how-it-works">
+    Follow the full pipeline from natural-language prompt to a live running topology in Packet Tracer.
+  </Card>
+  <Card title="Tools Overview" icon="wrench" href="/tools/overview">
+    Browse all 33 MCP tools across 11 groups: planning, validation, generation, live deploy, ACL, NAT, and more.
+  </Card>
+  <Card title="Live Deploy Setup" icon="plug" href="/setup/live-deploy">
+    Paste one bootstrap snippet into Packet Tracer's Builder Code Editor and enable real-time command streaming.
+  </Card>
+</CardGroup>
+
+## Requirements
+
+| Requirement | Version | Notes |
+|-------------|---------|-------|
+| Python | 3.11+ | Required at runtime |
+| Pydantic | 2.0+ | Installed automatically via `pip install -e .` |
+| FastMCP / mcp\[cli\] | 1.0+ | Installed automatically via `pip install -e .` |
+| Cisco Packet Tracer | 8.2+ | Required only for live deploy; all planning and generation tools work without it |
+| PTBuilder extension | — | Built into Packet Tracer 8.2+; required for the HTTP bridge |
+
+<Note>
+  The planning, validation, generation, and export tools work entirely offline. Cisco Packet Tracer is only needed when you use `pt_live_deploy`, `pt_bridge_status`, or any of the topology-interaction tools that read from or write to a running PT instance.
+</Note>
+
+## What's Included
+
+The server ships with:
+
+- **33 MCP tools** spanning catalog lookup, topology planning, validation, auto-fixing, script generation, IOS CLI config generation, live deploy, ACL management, NAT/PAT configuration, module installation, and project export.
+- **5 MCP resources** — read-only catalog resources (`pt://catalog/devices`, `pt://catalog/cables`, `pt://catalog/aliases`, `pt://catalog/templates`, `pt://capabilities`) any MCP client can inspect without calling a tool.
+- **74 device models** across 34 categories, from Cisco 2911 routers and 2960 switches to ASA firewalls, WLCs, IoT devices, and physical infrastructure.
+- **151 expansion modules** (HWIC, NIM, NM, WIC, SFP) with automatic serial-module selection per router model.
+- **15 cable types** with automatic cable inference from device categories, so you never have to specify straight-through vs. crossover manually.
+- **9 topology templates** — `single_lan`, `multi_lan`, `star`, `hub_spoke`, `three_router_triangle`, and more — that guide the orchestrator's layout and routing defaults.

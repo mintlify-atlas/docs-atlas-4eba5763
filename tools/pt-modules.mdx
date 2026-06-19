@@ -1,0 +1,179 @@
+---
+title: "pt_add_module and pt_install_modules_batch Reference"
+sidebarTitle: "pt_modules"
+description: "Reference for pt_list_modules, pt_add_module, and pt_install_modules_batch — hot-install expansion modules on live Packet Tracer routers."
+---
+
+Expansion module tools let you add serial, Ethernet, or wireless interfaces to routers that are already present in a live Packet Tracer topology — without tearing down and rebuilding the canvas. Packet Tracer requires a physical power cycle whenever a module is installed, so the bridge runtime patch handles it automatically: the device is powered off, the module is slotted in, and the device powers back on with `skipBoot`. Three tools cover module discovery and installation: `pt_list_modules` queries the built-in catalog, `pt_add_module` installs a single module with its own power cycle, and `pt_install_modules_batch` installs multiple modules across one or more routers in a single power cycle pass.
+
+---
+
+## pt\_list\_modules
+
+Lists expansion modules available in the MCP-Packet-Tracer catalog. Without filters, all modules are returned. Use this tool to discover exact module names before calling `pt_add_module` or `pt_install_modules_batch`.
+
+### Parameters
+
+<ParamField query="router_model" type="string" optional>
+  Filter to modules compatible with a specific router model. Accepts the PT model identifier, e.g. `"2911"`, `"ISR4321"`, `"2811"`. Modules that list no `compatible_with` constraint (generic modules) are always included. Omit to return all models.
+</ParamField>
+
+<ParamField query="category" type="string" optional>
+  Filter by module category. Valid values:
+  - `router_hwic` — HWIC cards for ISR G2 routers (1941, 2901, 2911)
+  - `router_nm` — NM cards for older ISR G1 routers (2811, 2620XM, 2621XM, Router-PT)
+  - `router_nim` — NIM cards for ISR 4000 series (ISR4321, ISR4331)
+  - `router_wic` — legacy WIC cards
+</ParamField>
+
+### Returns
+
+A JSON object with `count`, the active `filter`, and a `modules` array. Each element contains:
+
+<ResponseField name="name" type="string">
+  Exact module name to pass to `pt_add_module`, e.g. `"HWIC-2T"`, `"NIM-2T"`, `"NM-4A/S"`.
+</ResponseField>
+
+<ResponseField name="description" type="string">
+  Human-readable description of what the module provides.
+</ResponseField>
+
+<ResponseField name="category" type="string">
+  Module category (`router_hwic`, `router_nm`, `router_nim`, `router_wic`, etc.).
+</ResponseField>
+
+<ResponseField name="ports_added" type="array">
+  List of port names that will appear on the device after installation, e.g. `["Serial0/0/0", "Serial0/0/1"]`.
+</ResponseField>
+
+<ResponseField name="compatible_with" type="array | string">
+  Array of compatible router PT model identifiers, or the string `"any"` if the module has no restriction.
+</ResponseField>
+
+---
+
+## pt\_add\_module
+
+Installs a single expansion module into a named slot on a device that already exists in the active Packet Tracer topology. The bridge runtime patch manages the power cycle automatically — you do not need to power off the device manually.
+
+### Parameters
+
+<ParamField body="device_name" type="string" required>
+  The exact name of the device in the topology, e.g. `"R1"`, `"CORE-R2"`. Use `pt_query_topology` to list the names of devices currently in PT.
+</ParamField>
+
+<ParamField body="slot" type="string" required>
+  Slot identifier as a **string**. The format depends on the device type:
+  - HWIC slots on 1941 / 2901 / 2911: `"0/0"`, `"0/1"`, `"0/2"`, `"0/3"`
+  - NM slots on Router-PT / 2811 / 2620XM / 2621XM: `"1"`, `"2"`
+  - NIM slots on ISR4321 / ISR4331: `"0"`, `"1"`
+  - Cloud-PT / hosts: `"0"`, `"1"`, … up to available slots
+</ParamField>
+
+<ParamField body="module_name" type="string" required>
+  Exact module name from the catalog, e.g. `"HWIC-2T"`, `"NIM-2T"`, `"NM-4A/S"`, `"HWIC-1GE-SFP"`. Use `pt_list_modules` to find valid names.
+</ParamField>
+
+<ParamField body="dry_run" type="boolean" default="false">
+  When `true`, validates the request and returns the JavaScript payload without sending it to PT. Useful for inspecting what will be sent.
+</ParamField>
+
+### Validation
+
+Before the JS payload is sent, `pt_add_module` performs the following checks:
+
+- **Module exists** — `module_name` must match an entry in `ALL_MODULES`. An error is returned immediately if not found; use `pt_list_modules` to discover valid names.
+- **Slot is a non-empty string** — `null`, booleans, and empty strings are rejected.
+- **Device exists in PT** — a `queryTopology()` call confirms the device is in the active canvas.
+- **Module/router compatibility** — if the module has a `compatible_with` list, the device's reported model must appear in it.
+
+### Return value
+
+On success the response describes the installed module, the slot, and the ports added:
+
+```
+Module installed in R1.
+  Slot: 0/0
+  Module: HWIC-2T — 2-port Serial WAN Interface Card
+  Ports added: Serial0/0/0, Serial0/0/1
+  PT powered the device off/on automatically.
+```
+
+On failure, PT's rejection reason is reported along with common causes (occupied slot, incompatible model, wrong slot format).
+
+<Note>
+  Prefer `pt_install_modules_batch` when installing more than one module. Each `pt_add_module` call triggers a separate power cycle that can pause PT's script engine for several seconds and risk timing out the bridge bootstrap poll loop.
+</Note>
+
+---
+
+## pt\_install\_modules\_batch
+
+Installs N modules across one or more devices in a single JavaScript `runCode` execution — one power-off sweep, all `addModule` calls, then one power-on sweep. This is the recommended tool when a topology requires serial links between multiple routers, because it avoids the per-call power-on delay that can cause the bridge bootstrap to time out.
+
+### Parameters
+
+<ParamField body="modules" type="array" required>
+  A list of module installation descriptors. Each element is an object with:
+
+  - `device` (string, required) — exact device name in PT
+  - `slot` (string, required) — slot identifier (see slot addressing table below)
+  - `module` (string, required) — exact module name from the catalog
+</ParamField>
+
+<ParamField body="dry_run" type="boolean" default="false">
+  When `true`, validates every entry against the catalog and returns the batch JS payload without sending anything to PT.
+</ParamField>
+
+### Example
+
+```json
+[
+  { "device": "R1", "slot": "0/0", "module": "HWIC-2T" },
+  { "device": "R1", "slot": "0/1", "module": "HWIC-2T" },
+  { "device": "R2", "slot": "0/0", "module": "HWIC-2T" }
+]
+```
+
+This installs four serial ports on R1 (`Serial0/0/0`, `Serial0/0/1`, `Serial0/1/0`, `Serial0/1/1`) and two on R2 (`Serial0/0/0`, `Serial0/0/1`) in a single power cycle.
+
+### Validation
+
+Each entry is validated individually against the catalog before the batch payload is built. Errors for any single entry abort the entire batch and return a detailed error list. Compatible-with checks are performed live against `queryTopology()`.
+
+### Return value
+
+A JSON object with `summary`, `total_modules`, `devices_affected`, per-module status, and the `js_payload`. When `dry_run=false` and the bridge is connected, `sent` will be `true` and the summary confirms the batch was dispatched.
+
+---
+
+## Slot Addressing Reference
+
+| Router Family | Slot Type | Valid Slot Values | Example Module |
+|---|---|---|---|
+| 1941 / 2901 / 2911 | HWIC | `"0/0"` `"0/1"` `"0/2"` `"0/3"` | `HWIC-2T` |
+| ISR4321 / ISR4331 | NIM | `"0"` `"1"` | `NIM-2T` |
+| Router-PT / 2811 / 2620XM / 2621XM | NM | `"1"` `"2"` | `NM-4A/S` |
+| Cloud-PT / hosts | generic | `"0"` … `"7"` | `PT-CLOUD-NM-1CGE` |
+
+<Warning>
+  The `slot` parameter is always a **string**, not an integer. `"0/0"` and `0` address different slots on HWIC-capable routers. Passing a bare integer will be coerced to a string, but `0` becomes `"0"` which is a NIM-style slot — not the same as HWIC slot `"0/0"`.
+</Warning>
+
+---
+
+## Auto Serial Module Selection
+
+The catalog includes a convenience mapping (`SERIAL_MODULES`) that recommends the correct serial module for each ISR router model. When building topologies programmatically, use this table to decide which module to pass:
+
+| Router Model | Recommended Serial Module | Ports Added |
+|---|---|---|
+| 1941 | `HWIC-2T` | `Serial0/0/0`, `Serial0/0/1` |
+| 2901 | `HWIC-2T` | `Serial0/0/0`, `Serial0/0/1` |
+| 2911 | `HWIC-2T` | `Serial0/0/0`, `Serial0/0/1` |
+| ISR4321 | `NIM-2T` | `Serial0/1/0`, `Serial0/1/1` |
+| ISR4331 | `NIM-2T` | `Serial0/1/0`, `Serial0/1/1` |
+
+<Note>
+  The 2911 does **not** accept `NM-4A/S`. To add four serial ports to a 2911, install two `HWIC-2T` modules in slots `"0/0"` and `"0/1"` using `pt_install_modules_batch`.
+</Note>

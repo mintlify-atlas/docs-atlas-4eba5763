@@ -1,0 +1,139 @@
+---
+title: "Cable Types and Automatic Inference Rules"
+sidebarTitle: "Cable Types"
+description: "Reference for all 15 cable types in MCP Packet Tracer, including automatic cable inference rules based on device categories and PT link type codes."
+---
+
+MCP Packet Tracer eliminates the tedious step of choosing the right cable for every connection. When you build a topology plan the server automatically infers the correct cable from the two device categories on either end of each link — a router-to-switch connection always gets a straight-through, two routers get a crossover, and so on. The inference engine covers 88 directed category pairs. You only need to specify a cable explicitly for connection types the server cannot deduce from categories alone: serial WAN links, fiber uplinks, console management cables, and VoIP phone connections.
+
+<Note>
+  Most connections are auto-inferred and require no cable specification in your request. Only `serial`, `fiber`, `console`, and `phone` cables need to be set explicitly — and even serial is handled automatically when the orchestrator detects that a routing protocol requires WAN links.
+</Note>
+
+## Supported Cable Types
+
+These are the eight validated cable types you can use in topology plans. The remaining seven PT link codes (see the full table below) are for reference only and are not emitted by the plan generator.
+
+| Cable | PT Code | Typical Use | Auto-inferred? |
+|-------|---------|-------------|----------------|
+| `straight` | 8100 | Switch ↔ Router, Switch ↔ PC/Server/AP, Hub ↔ any | Yes |
+| `cross` | 8101 | Router ↔ Router, Switch ↔ Switch, Router ↔ Firewall | Yes |
+| `serial` | 8106 | Router Serial ↔ Router Serial (requires HWIC/NIM module) | No — specify explicitly |
+| `fiber` | 8103 | Fiber optic connections | No — specify explicitly |
+| `console` | 8108 | PC/Laptop management access to Router/Switch | No — specify explicitly |
+| `phone` | 8104 | VoIP phone connections | No — specify explicitly |
+| `coaxial` | 8110 | Cable modems (Coaxial0 port) | Yes (modem pairs) |
+| `auto` | 8107 | PT auto-detects the correct cable type | — |
+
+## Cable Inference Rules
+
+The table below covers the primary category pairs the inference engine handles. Every rule is bidirectional — the server stores both `(A, B)` and `(B, A)` in the lookup table so direction does not matter.
+
+| Category A | Category B | Inferred Cable |
+|------------|------------|----------------|
+| `router` | `switch` | `straight` |
+| `router` | `router` | `cross` |
+| `router` | `cloud` | `straight` |
+| `router` | `firewall` | `cross` |
+| `router` | `hub` | `straight` |
+| `router` | `pc` | `cross` |
+| `router` | `server` | `cross` |
+| `router` | `modem` | `straight` |
+| `router` | `meraki` | `straight` |
+| `router` | `iot` | `straight` |
+| `switch` | `switch` | `cross` |
+| `switch` | `pc` | `straight` |
+| `switch` | `server` | `straight` |
+| `switch` | `laptop` | `straight` |
+| `switch` | `accesspoint` | `straight` |
+| `switch` | `firewall` | `straight` |
+| `switch` | `wlc` | `straight` |
+| `switch` | `hub` | `straight` |
+| `switch` | `bridge` | `straight` |
+| `switch` | `repeater` | `straight` |
+| `switch` | `ip_phone` | `straight` |
+| `switch` | `wireless_router` | `straight` |
+| `switch` | `home_gateway` | `straight` |
+| `switch` | `tv` | `straight` |
+| `switch` | `voip` | `straight` |
+| `switch` | `analog_phone` | `straight` |
+| `switch` | `meraki` | `straight` |
+| `switch` | `patch_panel` | `straight` |
+| `switch` | `wired_end_device` | `straight` |
+| `switch` | `wireless_end_device` | `straight` |
+| `switch` | `embedded_server` | `straight` |
+| `switch` | `sniffer` | `straight` |
+| `switch` | `sbc` | `straight` |
+| `switch` | `iot` | `straight` |
+| `hub` | `pc` | `straight` |
+| `hub` | `server` | `straight` |
+| `hub` | `laptop` | `straight` |
+| `hub` | `bridge` | `straight` |
+| `hub` | `repeater` | `straight` |
+| `firewall` | `pc` | `straight` |
+| `wlc` | `accesspoint` | `straight` |
+| `modem` | `cloud` | `straight` |
+| `wireless_router` | `modem` | `straight` |
+| `home_gateway` | `modem` | `straight` |
+| `ip_phone` | `pc` | `straight` |
+
+If a category pair is not found in the lookup table the server falls back to `straight`.
+
+## When to Specify Cable Explicitly
+
+Use the `cable` field in a link definition for these cases:
+
+<CardGroup cols={2}>
+  <Card title="Serial WAN links" icon="arrow-right-arrow-left">
+    Set `cable: "serial"` when connecting two routers via Serial interfaces (after installing HWIC-2T or NIM-2T modules). The orchestrator handles this automatically when `routing: "static"` with serial topology is requested.
+  </Card>
+  <Card title="Fiber uplinks" icon="circle-nodes">
+    Set `cable: "fiber"` for connections that must traverse fiber ports on patch panels, wall mounts, or ISR uplinks. The server cannot infer fiber from categories alone.
+  </Card>
+  <Card title="Console management" icon="terminal">
+    Set `cable: "console"` for out-of-band management connections from a PC or Laptop to a Router or Switch console port.
+  </Card>
+  <Card title="VoIP phone lines" icon="phone">
+    Set `cable: "phone"` when wiring an analog phone or VoIP device that uses the PT phone cable type rather than Ethernet.
+  </Card>
+</CardGroup>
+
+## Serial Cable Requirements
+
+<Warning>
+  Serial cables require physical hardware modules installed on the router **before** the link can be created. The correct execution order is: `addDevice()` → `addModule()` → `addLink()`. The PTBuilder generator enforces this order automatically.
+</Warning>
+
+When the orchestrator detects a serial topology it selects the appropriate module per router model:
+
+| Router Model | Auto-selected Module | Serial Ports Added |
+|-------------|---------------------|-------------------|
+| `1941` | `HWIC-2T` | Serial0/0/0, Serial0/0/1 |
+| `2901` | `HWIC-2T` | Serial0/0/0, Serial0/0/1 |
+| `2911` | `HWIC-2T` | Serial0/0/0, Serial0/0/1 |
+| `ISR4321` | `NIM-2T` | Serial0/1/0, Serial0/1/1 |
+| `ISR4331` | `NIM-2T` | Serial0/1/0, Serial0/1/1 |
+
+## All PT Link Type Codes (Reference)
+
+The full set of 15 link type codes used internally by Packet Tracer's IPC API. Codes 8100–8114 map to the `createLink()` call in the PT Script Engine.
+
+| Cable | PT Code | Notes |
+|-------|---------|-------|
+| `straight` | 8100 | Straight-through Ethernet |
+| `cross` | 8101 | Crossover Ethernet |
+| `roll` | 8102 | Rollover cable |
+| `fiber` | 8103 | Fiber optic |
+| `phone` | 8104 | VoIP phone cable |
+| `cable` | 8105 | Cable TV coax |
+| `serial` | 8106 | Serial (DTE/DCE) |
+| `auto` | 8107 | Auto-detect (PT default) |
+| `console` | 8108 | Console / management |
+| `wireless` | 8109 | Wireless link (implicit in AP connections) |
+| `coaxial` | 8110 | Coaxial |
+| `octal` | 8111 | Octal cable (async serial) |
+| `cellular` | 8112 | Cellular connection |
+| `usb` | 8113 | USB cable |
+| `custom_io` | 8114 | Custom I/O (IoT) |
+
+The cable catalog is also available as a read-only MCP resource at `pt://catalog/cables`. See [MCP Resources](/reference/mcp-resources) for details.

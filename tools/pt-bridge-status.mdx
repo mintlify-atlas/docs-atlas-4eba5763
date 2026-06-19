@@ -1,0 +1,56 @@
+---
+title: "pt_bridge_status: Check the HTTP Bridge Connection"
+sidebarTitle: "pt_bridge_status"
+description: "pt_bridge_status checks whether the HTTP bridge on port 54321 is active and PTBuilder is polling, confirming live deploy is ready."
+---
+
+`pt_bridge_status` is a pre-flight health check for the live deploy pipeline. It verifies that the HTTP bridge is listening on `http://127.0.0.1:54321` and that PTBuilder in a running Packet Tracer instance has polled it within the last 5 seconds. Call this tool before `pt_live_deploy`, `pt_query_topology`, or any other bridge-dependent operation to surface connectivity problems early and avoid silent failures.
+
+## Parameters
+
+This tool takes no parameters.
+
+## Return value
+
+<ResponseField name="status" type="string">
+  A human-readable status string. Possible responses:
+
+  - **`"Bridge ACTIVO y CONECTADO. Packet Tracer esta recibiendo comandos en http://127.0.0.1:54321"`** — the bridge is running and PTBuilder polled within the last 5 seconds. Live deploy is ready.
+  - **`"Bridge activo en http://127.0.0.1:54321 pero PT NO esta conectado.\n\nPega esto en Builder Code Editor ... y haz clic en Run:\n\n<bootstrap snippet>"`** — the bridge HTTP server is running but no recent poll from PTBuilder was detected. The bootstrap snippet is included for copy-pasting.
+  - **`"No se pudo iniciar el bridge HTTP en :54321.\nPuerto bloqueado por otro proceso."`** — the bridge could not bind to port 54321. Another process is using the port.
+</ResponseField>
+
+## How the bridge starts
+
+The MCP server attempts to start the HTTP bridge automatically as an in-process daemon thread the moment tools are registered — before any tool is ever called. If the bridge is already running (from a previous session or an external `start_bridge.ps1`), the server detects the existing listener and skips starting a new one. `pt_bridge_status` calls `_ensure_bridge()` as its first step, so even if the bridge stopped, calling this tool will attempt to restart it.
+
+## Connection detection
+
+The bridge tracks the timestamp of the most recent `GET /next` poll from PTBuilder. A connection is considered active when:
+
+- The bridge HTTP server is responding to `GET /ping` with HTTP 200
+- The `GET /status` endpoint reports `"connected": true`
+- The last poll occurred within the past **5 seconds**
+
+If PTBuilder stops polling (Packet Tracer closed, webview crashed, bootstrap not running), `connected` flips to `false` and the `_patches_applied` flag resets so the runtime patches are re-injected on the next reconnect.
+
+## When to call `pt_bridge_status`
+
+- **Before `pt_live_deploy`** — confirm the bridge and PTBuilder are both ready
+- **Before `pt_query_topology`** — the query requires a round-trip to PT via the bridge
+- **Before `pt_delete_device`, `pt_rename_device`, `pt_move_device`, `pt_delete_link`** — all live topology operations require the bridge
+- **After restarting Packet Tracer** — the bootstrap must be re-pasted each PT session; `pt_bridge_status` will show you the snippet to paste
+
+## Troubleshooting
+
+| Status | Cause | Resolution |
+|--------|-------|------------|
+| Bridge active and connected | — | ✅ Ready to deploy |
+| Bridge active, PT not connected | Bootstrap not pasted, or PT was restarted | Open PT → Extensions → Builder Code Editor → paste bootstrap → Run |
+| Bridge active, PT not connected | PT is open but Builder Code Editor was never opened | Extensions → Builder Code Editor must be opened at least once |
+| Port 54321 blocked | Another process bound to the port | `netstat -ano \| findstr :54321` on Windows; kill the conflicting process and retry |
+| Bridge could not start | Firewall or antivirus blocking loopback | Allow loopback connections on 127.0.0.1:54321 |
+
+<Note>
+  The bootstrap snippet injected by PTBuilder runs inside the Chromium WebView (QWebEngine), not in Packet Tracer's Script Engine. The WebView has `XMLHttpRequest`; the Script Engine does not. This is why the bootstrap uses `window.webview.evaluateJavaScriptAsync(...)` to bridge the two contexts.
+</Note>

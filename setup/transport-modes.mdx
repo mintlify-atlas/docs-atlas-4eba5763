@@ -1,0 +1,130 @@
+---
+title: "Stdio vs Streamable-HTTP Transport Modes"
+sidebarTitle: "Transport Modes"
+description: "Compare MCP Packet Tracer's two transport modes — stdio for desktop clients and streamable-HTTP for shared or remote scenarios — and choose the right one."
+---
+
+MCP Packet Tracer exposes two transport modes for connecting AI clients: **stdio**, where the client spawns and owns the server process, and **streamable-HTTP**, where the server runs independently and any number of clients connect to it over `http://127.0.0.1:39000/mcp`. Both modes give you full access to all 33 MCP tools and 5 resources; the difference is entirely in lifecycle, persistence, and multi-client sharing.
+
+## Comparison
+
+| | **stdio** | **streamable-HTTP** |
+|---|---|---|
+| **Who starts the server** | The MCP client spawns it automatically | You start it manually with `python -m packet_tracer_mcp` |
+| **Persistence** | Lives only for the client session; exits when the client closes | Stays running independently of any client |
+| **Multi-client support** | One client per server process | Multiple clients (e.g., multiple VS Code windows) share one instance |
+| **Shared state** | Isolated per client session | Shared across all connected clients |
+| **Debuggability** | Logs go to the client's output panel | You can tail logs in the terminal; `curl http://127.0.0.1:39000/mcp` works |
+| **Best for** | VS Code, Claude Desktop, Cursor, Codex CLI — any single desktop client | Multi-window VS Code, remote setups, or when you want the server always on |
+
+## Starting Each Mode
+
+### stdio
+
+Pass the `--stdio` flag. The MCP client handles process spawning — you configure this in the client's MCP config file and never run the command yourself.
+
+```bash
+python -m packet_tracer_mcp --stdio
+```
+
+The server reads MCP messages from `stdin` and writes responses to `stdout`. The internal HTTP bridge to Packet Tracer (port `54321`) still starts automatically inside the spawned process, so live deploy works identically in stdio mode.
+
+### streamable-HTTP
+
+Omit the `--stdio` flag (HTTP is the default). Run this once in any terminal before opening your AI client:
+
+```bash
+python -m packet_tracer_mcp
+# Serving on http://127.0.0.1:39000/mcp
+```
+
+The server binds to `127.0.0.1:39000` and exposes the MCP endpoint at `/mcp`. It also starts the bridge on `54321`. Both services stay alive until you terminate the process.
+
+## Client Configuration Examples
+
+### stdio — VS Code `.vscode/mcp.json`
+
+```json
+{
+  "servers": {
+    "packet-tracer": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["-m", "packet_tracer_mcp", "--stdio"]
+    }
+  }
+}
+```
+
+### stdio — Claude Desktop `claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "packet-tracer": {
+      "command": "python",
+      "args": ["-m", "packet_tracer_mcp", "--stdio"]
+    }
+  }
+}
+```
+
+### stdio — Cursor `.cursor/mcp.json`
+
+```json
+{
+  "mcpServers": {
+    "packet-tracer": {
+      "command": "python",
+      "args": ["-m", "packet_tracer_mcp", "--stdio"]
+    }
+  }
+}
+```
+
+### stdio — Codex CLI `~/.codex/config.toml`
+
+```toml
+[mcp_servers.packet-tracer]
+command = "python"
+args = ["-m", "packet_tracer_mcp", "--stdio"]
+```
+
+### streamable-HTTP — VS Code `.vscode/mcp.json`
+
+Start the server first, then configure VS Code to point at it:
+
+```bash
+python -m packet_tracer_mcp
+```
+
+```json
+{
+  "servers": {
+    "packet-tracer": {
+      "url": "http://127.0.0.1:39000/mcp"
+    }
+  }
+}
+```
+
+## When to Use Each
+
+<CardGroup cols={2}>
+  <Card title="Use stdio when…" icon="terminal">
+    - You use a single desktop AI client (VS Code, Claude Desktop, Cursor, Codex CLI)
+    - You want zero-configuration — no background process to manage
+    - You prefer the server to start and stop with your editor session
+    - You are setting up MCP Packet Tracer for the first time
+  </Card>
+  <Card title="Use streamable-HTTP when…" icon="server">
+    - You run multiple VS Code windows simultaneously and want shared topology state
+    - You need the server always available, independent of any client session
+    - You want to debug tool calls with `curl` or inspect live logs in a terminal
+    - You are integrating MCP Packet Tracer into a remote or shared development environment
+  </Card>
+</CardGroup>
+
+<Tip>
+  Even in **stdio** mode, the internal HTTP bridge to Packet Tracer starts automatically on port `54321` inside the spawned process. Live Deploy — sending commands directly to a running PT instance — works exactly the same in both transport modes. The choice of stdio vs. streamable-HTTP only affects how your AI client talks to the MCP server, not how the MCP server talks to Packet Tracer.
+</Tip>

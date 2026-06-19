@@ -1,0 +1,228 @@
+---
+title: "pt_apply_nat and pt_remove_nat: NAT/PAT Configuration"
+sidebarTitle: "pt_nat"
+description: "Reference for pt_apply_nat and pt_remove_nat — configure Static NAT, Dynamic NAT, and PAT overload on live Cisco Packet Tracer routers."
+---
+
+NAT/PAT tools configure address translation on routers that are already deployed in a live Packet Tracer topology. Three translation modes are supported: **static NAT** maps each private IP to a fixed public IP permanently (suitable for servers), **dynamic NAT** assigns public IPs from a pool on demand, and **PAT** (Port Address Translation / NAT overload) lets many private hosts share a single public IP using port numbers as the differentiator — the mode used by virtually all home and enterprise routers. Like the ACL tools, NAT is applied post-deploy via `configureIosDevice` over the HTTP bridge, and the same pipeline of static validation → dynamic topology check → CLI generation → bridge send applies.
+
+---
+
+## pt\_apply\_nat
+
+Configures NAT or PAT on a router in the active Packet Tracer topology. The pipeline is: build `NATConfig` → static validation (IPs, interface coherence, pool range) → dynamic validation against PT (router and interfaces exist) → generate IOS CLI → send via `configureIosDevice`.
+
+### Parameters
+
+<ParamField body="router" type="string" required>
+  Exact name of the router device in PT, e.g. `"R1"`. Use `pt_query_topology` if unsure of the current device names.
+</ParamField>
+
+<ParamField body="mode" type="string" required>
+  Translation mode: `"static"`, `"dynamic"`, or `"pat"`.
+</ParamField>
+
+<ParamField body="inside_interface" type="string" required>
+  Interface connected to the private LAN, e.g. `"GigabitEthernet0/0"`. Will be marked with `ip nat inside`.
+</ParamField>
+
+<ParamField body="outside_interface" type="string" required>
+  Interface connected to the WAN or Internet, e.g. `"GigabitEthernet0/1"`. Will be marked with `ip nat outside`.
+</ParamField>
+
+<ParamField body="static_mappings" type="array" optional>
+  **Required for `mode="static"`.** List of one-to-one IP mapping objects:
+  ```json
+  [{ "inside_local": "192.168.1.10", "inside_global": "200.1.1.5" }]
+  ```
+  Each `inside_local` is the private IP; `inside_global` is the fixed public IP it maps to.
+</ParamField>
+
+<ParamField body="inside_networks" type="array" optional>
+  **Required for `mode="dynamic"` and `mode="pat"`.** List of internal networks to translate, in `"network wildcard"` format:
+  ```json
+  ["192.168.1.0 0.0.0.255", "192.168.2.0 0.0.0.255"]
+  ```
+  These are used to generate an `access-list` inline with the NAT configuration.
+</ParamField>
+
+<ParamField body="acl_number" type="string" default="1">
+  Number or name for the ACL generated from `inside_networks`. Defaults to `"1"`. If an ACL with this number already exists in PT, the new one replaces it.
+</ParamField>
+
+<ParamField body="pool_name" type="string" default="NAT-POOL">
+  Name of the NAT pool for `mode="dynamic"` or `mode="pat"` with `use_interface_overload=false`.
+</ParamField>
+
+<ParamField body="pool_start" type="string" optional>
+  First IP address in the public pool, e.g. `"200.1.1.1"`. Required for `mode="dynamic"` and `mode="pat"` when `use_interface_overload=false`.
+</ParamField>
+
+<ParamField body="pool_end" type="string" optional>
+  Last IP address in the public pool, e.g. `"200.1.1.10"`. Must be greater than or equal to `pool_start`.
+</ParamField>
+
+<ParamField body="pool_netmask" type="string" optional>
+  Subnet mask of the pool in dotted-decimal format, e.g. `"255.255.255.0"`. Note: this is a **mask**, not a wildcard.
+</ParamField>
+
+<ParamField body="use_interface_overload" type="boolean" default="false">
+  **PAT only.** When `true`, the router uses the IP address of `outside_interface` directly as the public address (`ip nat inside source list X interface <outside> overload`). This is the typical configuration when the ISP assigns a single IP to the WAN interface and no pool is needed.
+</ParamField>
+
+<ParamField body="dry_run" type="boolean" default="false">
+  When `true`, validates and returns the IOS CLI and JS payload without sending to PT.
+</ParamField>
+
+### What gets configured
+
+The generated IOS CLI sent to the router covers three areas:
+
+1. **Interface marking** — `ip nat inside` on `inside_interface`; `ip nat outside` on `outside_interface`
+2. **ACL and pool** (dynamic / PAT) — an inline `access-list` statement for `inside_networks`, and an `ip nat pool` definition when `use_interface_overload=false`
+3. **Translation rule** — the `ip nat inside source` command appropriate to the mode
+
+### Return value
+
+```json
+{
+  "summary": "✅ PAT/Overload valid for router 'R1'.\n📤 Applied on 'R1' via bridge (configureIosDevice).",
+  "mode": "pat",
+  "valid": true,
+  "errors": [],
+  "warnings": [],
+  "cli_lines": ["interface GigabitEthernet0/0", " ip nat inside", "..."],
+  "js_payload": "configureIosDevice(\"R1\", \"...\");",
+  "sent": true,
+  "dry_run": false
+}
+```
+
+### Example: PAT with interface overload (most common scenario)
+
+This is the standard configuration for a router with a single public IP from the ISP:
+
+```json
+{
+  "router": "R1",
+  "mode": "pat",
+  "inside_interface": "GigabitEthernet0/0",
+  "outside_interface": "GigabitEthernet0/1",
+  "inside_networks": ["192.168.1.0 0.0.0.255"],
+  "use_interface_overload": true
+}
+```
+
+The generated IOS CLI:
+
+```
+interface GigabitEthernet0/0
+ ip nat inside
+!
+interface GigabitEthernet0/1
+ ip nat outside
+!
+access-list 1 permit 192.168.1.0 0.0.0.255
+ip nat inside source list 1 interface GigabitEthernet0/1 overload
+```
+
+### Example: Static NAT for an internal web server
+
+```json
+{
+  "router": "R1",
+  "mode": "static",
+  "inside_interface": "GigabitEthernet0/0",
+  "outside_interface": "GigabitEthernet0/1",
+  "static_mappings": [
+    { "inside_local": "192.168.1.100", "inside_global": "200.1.1.50" }
+  ]
+}
+```
+
+---
+
+## pt\_remove\_nat
+
+Removes a NAT/PAT configuration from a router. Clears the interface markings, removes the translation rule, and optionally removes the ACL and pool.
+
+### Parameters
+
+<ParamField body="router" type="string" required>
+  Exact router name in PT.
+</ParamField>
+
+<ParamField body="mode" type="string" required>
+  Mode that was applied: `"static"`, `"dynamic"`, or `"pat"`.
+</ParamField>
+
+<ParamField body="inside_interface" type="string" required>
+  Interface that was marked `ip nat inside`.
+</ParamField>
+
+<ParamField body="outside_interface" type="string" required>
+  Interface that was marked `ip nat outside`.
+</ParamField>
+
+<ParamField body="acl_number" type="string" default="1">
+  Number/name of the access-list that was created with the NAT. Used to generate the `no access-list` removal command.
+</ParamField>
+
+<ParamField body="pool_name" type="string" optional>
+  Name of the NAT pool to remove. Only needed for `mode="dynamic"` or `mode="pat"` with a pool. Pass the same `pool_name` used during `pt_apply_nat`.
+</ParamField>
+
+<ParamField body="static_mappings" type="array" optional>
+  **Required for `mode="static"`.** List of `{inside_local, inside_global}` dicts matching the original mappings, so the tool can generate `no ip nat inside source static …` for each.
+</ParamField>
+
+<ParamField body="dry_run" type="boolean" default="false">
+  Returns the removal payload without sending it.
+</ParamField>
+
+### Return value
+
+```json
+{
+  "summary": "📤 NAT 'pat' removed on 'R1' via bridge.",
+  "router": "R1",
+  "mode": "pat",
+  "js_payload": "configureIosDevice(\"R1\", \"...\");",
+  "sent": true,
+  "dry_run": false
+}
+```
+
+---
+
+## Mode Guide
+
+| Mode | When to Use | Key Parameters |
+|---|---|---|
+| **static** | A server inside the LAN must always be reachable from the Internet via the same public IP | `static_mappings` |
+| **dynamic** | You have a pool of public IPs larger than overload justifies, or you need per-host public IP tracking | `inside_networks`, `pool_start`, `pool_end`, `pool_netmask` |
+| **pat** | One or a few public IPs need to serve many private hosts (home router, enterprise edge) | `inside_networks`, `use_interface_overload` or pool params |
+
+<Warning>
+  Both `pt_apply_nat` and `pt_remove_nat` require the HTTP bridge to be active and Packet Tracer to be connected. Check status with `pt_bridge_status` before calling. If the bridge is active but PT is disconnected, the tools still run the validation pipeline and return the CLI payload, but `sent` will be `false`.
+</Warning>
+
+---
+
+## Validation Rules
+
+The static validator (`validate_nat_config`) enforces:
+
+| Rule | Detail |
+|---|---|
+| **Interface coherence** | `inside_interface` and `outside_interface` must be different; using the same interface for both is an error. |
+| **Static mappings required** | `mode="static"` requires at least one entry in `static_mappings`. |
+| **Inside networks required** | `mode="dynamic"` and `mode="pat"` require at least one entry in `inside_networks`. |
+| **Pool required (dynamic)** | `mode="dynamic"` always requires a pool (`pool_start`, `pool_end`, `pool_netmask`). |
+| **Pool required (PAT without overload)** | `mode="pat"` with `use_interface_overload=false` requires pool parameters. |
+| **IP address format** | All IP values (`inside_local`, `inside_global`, `pool_start`, `pool_end`) must be valid IPv4 addresses. |
+| **Pool range coherence** | `pool_start` must be less than or equal to `pool_end`. |
+| **Netmask validity** | `pool_netmask` must be a valid subnet mask (all 1s followed by all 0s), not a wildcard. |
+| **Network/wildcard format** | Entries in `inside_networks` must be `"any"`, `"host A.B.C.D"`, or `"A.B.C.D W.W.W.W"`. |
+
+The dynamic validator additionally checks via the bridge that `router` exists in PT and that both `inside_interface` and `outside_interface` correspond to real ports on that router's catalog model (sub-interfaces in the form `GigabitEthernet0/0.10` are accepted if the base port exists).

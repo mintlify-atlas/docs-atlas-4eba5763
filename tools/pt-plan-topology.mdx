@@ -1,0 +1,165 @@
+---
+title: "pt_plan_topology: Generate a TopologyPlan from Text"
+sidebarTitle: "pt_plan_topology"
+description: "pt_plan_topology takes a natural-language description and returns a complete, addressed TopologyPlan JSON with devices, links, IPs, DHCP, routes, and modules."
+---
+
+`pt_plan_topology` is the core planning tool in MCP Packet Tracer. Given a set of parameters describing the desired network, it runs the full orchestration pipeline — creating devices, assigning /24 LAN subnets and /30 inter-router links, generating DHCP pools, computing routing tables (static, OSPF, EIGRP, or RIP), and packaging everything into a single machine-readable `TopologyPlan` JSON object. The output can be fed directly into `pt_validate_plan`, `pt_fix_plan`, `pt_generate_script`, `pt_generate_configs`, and `pt_live_deploy`.
+
+## Parameters
+
+<ParamField query="routers" type="integer" default="2">
+  Number of routers to place in the topology. Accepts 1 to 20. Each router gets its own LAN subnet.
+</ParamField>
+
+<ParamField query="pcs_per_lan" type="integer" default="3">
+  Number of PCs (`PC-PT`) to connect to each LAN switch. Applied uniformly to all LANs.
+</ParamField>
+
+<ParamField query="laptops_per_lan" type="integer" default="0">
+  Number of laptops (`Laptop-PT`) to connect to each LAN switch, in addition to PCs.
+</ParamField>
+
+<ParamField query="switches_per_router" type="integer" default="1">
+  Number of access switches per router. Accepts 0 to 4. Each switch connects directly to its router.
+</ParamField>
+
+<ParamField query="servers" type="integer" default="0">
+  Number of server hosts (`Server-PT`) to add to the topology. Servers are attached to the first switch.
+</ParamField>
+
+<ParamField query="access_points" type="integer" default="0">
+  Number of wireless access points (`AccessPoint-PT`) to add — one per LAN at most.
+</ParamField>
+
+<ParamField query="has_wan" type="boolean" default="false">
+  When `true`, adds a `Cloud-PT` node connected to the last router to simulate a WAN uplink.
+</ParamField>
+
+<ParamField query="dhcp" type="boolean" default="true">
+  When `true`, generates one DHCP pool per LAN. PCs and laptops receive IPs automatically. The gateway address (`.1`) is excluded from the pool.
+</ParamField>
+
+<ParamField query="routing" type="string" default="static">
+  Routing protocol to configure. One of: `static`, `ospf`, `eigrp`, `rip`, `none`.
+
+  - `static` — generates bidirectional `ip route` commands on every router.
+  - `ospf` — generates `router ospf`, `router-id`, and `network ... area 0` commands.
+  - `eigrp` — generates `router eigrp {AS}`, `network ... wildcard`, `no auto-summary`.
+  - `rip` — generates `router rip`, `version 2`, `network`, `no auto-summary`.
+  - `none` — no routing configuration is generated.
+</ParamField>
+
+<ParamField query="router_model" type="string" default="2911">
+  Cisco router model to use. Supported: `1941`, `2901`, `2911`, `ISR4321`. The `2911` is the default because it has 3 GigabitEthernet ports, which accommodates most multi-router topologies without requiring expansion modules.
+</ParamField>
+
+<ParamField query="switch_model" type="string" default="2960-24TT">
+  Cisco switch model to use. Supported: `2960-24TT`, `3560-24PS`. The `3560-24PS` supports Layer 3 routing.
+</ParamField>
+
+<ParamField query="template" type="string" default="multi_lan">
+  Topology template that guides the orchestrator's structure. One of: `single_lan`, `multi_lan`, `multi_lan_wan`, `star`, `hub_spoke`, `branch_office`, `router_on_a_stick`, `three_router_triangle`, `custom`. Use `pt_list_templates` to see all templates with descriptions and default parameters.
+</ParamField>
+
+<ParamField query="floating_routes" type="boolean" default="false">
+  When `true` and `routing` is `static`, generates backup static routes with administrative distance 254 via alternate paths. Requires a topology with multiple paths between routers (e.g. a triangle or ring).
+</ParamField>
+
+<ParamField query="ospf_process_id" type="integer" default="1">
+  OSPF process ID to use when `routing` is `ospf`. Accepts 1 to 65535.
+</ParamField>
+
+<ParamField query="eigrp_as" type="integer" default="100">
+  EIGRP autonomous system number to use when `routing` is `eigrp`. Accepts 1 to 65535.
+</ParamField>
+
+## Returns
+
+`pt_plan_topology` returns the `TopologyPlan` serialized as a JSON string. The top-level fields are:
+
+<ResponseField name="name" type="string">
+  Topology name, defaults to `"topology"`.
+</ResponseField>
+
+<ResponseField name="devices" type="array">
+  List of `DevicePlan` objects. Each device has: `name`, `model`, `category`, `role`, canvas coordinates `x`/`y`, an `interfaces` map of `{ interface_name: "IP/prefix" }`, and an optional `gateway`.
+</ResponseField>
+
+<ResponseField name="links" type="array">
+  List of `LinkPlan` objects. Each link has: `device_a`, `port_a`, `device_b`, `port_b`, and `cable` (e.g. `"straight"`, `"cross"`, `"serial"`).
+</ResponseField>
+
+<ResponseField name="modules" type="array">
+  List of `ModulePlan` objects specifying expansion modules to install. Each has: `device`, `slot`, and `module` (e.g. `"HWIC-2T"`).
+</ResponseField>
+
+<ResponseField name="dhcp_pools" type="array">
+  List of `DHCPPool` objects, one per LAN when `dhcp` is `true`. Each has: `router`, `pool_name`, `network`, `mask`, `gateway`, `dns`, `excluded_start`, `excluded_end`.
+</ResponseField>
+
+<ResponseField name="static_routes" type="array">
+  List of `StaticRoute` objects. Each has: `router`, `destination`, `mask`, `next_hop`, `admin_distance`. Floating routes have `admin_distance` set to 254.
+</ResponseField>
+
+<ResponseField name="ospf_configs" type="array">
+  List of `OSPFConfig` objects (populated when `routing` is `ospf`). Each has: `router`, `process_id`, `router_id`, `networks`.
+</ResponseField>
+
+<ResponseField name="rip_configs" type="array">
+  List of `RIPConfig` objects (populated when `routing` is `rip`). Each has: `router`, `version`, `networks`, `no_auto_summary`.
+</ResponseField>
+
+<ResponseField name="eigrp_configs" type="array">
+  List of `EIGRPConfig` objects (populated when `routing` is `eigrp`). Each has: `router`, `as_number`, `networks`, `no_auto_summary`.
+</ResponseField>
+
+<ResponseField name="errors" type="array">
+  List of error message strings detected during planning. An empty list means the plan is valid.
+</ResponseField>
+
+<ResponseField name="warnings" type="array">
+  List of non-fatal warning strings (e.g. DHCP gateway mismatches).
+</ResponseField>
+
+## Example
+
+**Request** — a 3-router OSPF topology with DHCP and one laptop per LAN:
+
+```json
+{
+  "routers": 3,
+  "pcs_per_lan": 2,
+  "laptops_per_lan": 1,
+  "switches_per_router": 1,
+  "dhcp": true,
+  "routing": "ospf",
+  "router_model": "2911",
+  "switch_model": "2960-24TT",
+  "template": "multi_lan"
+}
+```
+
+The returned `TopologyPlan` will contain:
+- 3 routers (`R1`, `R2`, `R3`) each with a `/24` LAN subnet and a `/30` inter-router link
+- 3 switches (`SW1`, `SW2`, `SW3`) connected to their respective routers
+- 6 PCs (`PC1`–`PC6`) and 3 laptops (`LT1`–`LT3`)
+- 3 DHCP pools on R1, R2, and R3
+- OSPF process 1 configured on all three routers with `network ... area 0` for every subnet
+
+**IP addressing example output:**
+```
+LAN 1:  192.168.0.0/24  →  R1 Gig0/0: .1  | PC1: .2 | PC2: .3 | LT1: .4
+LAN 2:  192.168.1.0/24  →  R2 Gig0/0: .1  | PC3: .2 | PC4: .3 | LT2: .4
+LAN 3:  192.168.2.0/24  →  R3 Gig0/0: .1  | PC5: .2 | PC6: .3 | LT3: .4
+Link 1: 10.0.0.0/30     →  R1 Gig0/1: 10.0.0.1  | R2 Gig0/1: 10.0.0.2
+Link 2: 10.0.0.4/30     →  R2 Gig0/2: 10.0.0.5  | R3 Gig0/1: 10.0.0.6
+```
+
+<Note>
+The output of `pt_plan_topology` is machine-readable JSON. Pass the raw JSON string directly to `pt_validate_plan`, `pt_fix_plan`, `pt_generate_script`, `pt_generate_configs`, or `pt_live_deploy` as the `plan_json` parameter.
+</Note>
+
+<Warning>
+Do **not** use the output of `pt_full_build` as input to downstream tools. `pt_full_build` returns a human-readable formatted report, not raw JSON. If you need machine-readable plan JSON for downstream tools, always use `pt_plan_topology`.
+</Warning>

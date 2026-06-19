@@ -1,0 +1,107 @@
+---
+title: "MCP Tools Reference: 33 Tools for Packet Tracer"
+sidebarTitle: "Overview"
+description: "Complete reference index for all 33 MCP Packet Tracer tools grouped by function: planning, validation, generation, deploy, topology interaction, modules, ACL, and NAT."
+---
+
+MCP Packet Tracer exposes 33 MCP tools that give any LLM full programmatic control over Cisco Packet Tracer. Together they cover the complete network engineering workflow: translating a natural-language description into a validated `TopologyPlan`, generating PTBuilder JavaScript and IOS CLI configs, deploying the topology live into a running Packet Tracer instance, and then managing that topology interactively — querying, renaming, moving devices, installing expansion modules, and applying ACL and NAT policies. Every tool is callable from any MCP client (GitHub Copilot, Claude, Codex, Cursor) without leaving the editor.
+
+## Tool Groups
+
+| Group | Tools | What They Do |
+|-------|-------|-------------|
+| **Catalog** | 3 | List supported devices, templates, and per-model port details |
+| **Estimation** | 1 | Dry-run count of devices, links, and configs before planning |
+| **Planning** | 1 | Generate a complete `TopologyPlan` JSON from parameters |
+| **Validation & Fixing** | 3 | Validate plans against 24 error codes, auto-fix common issues, explain decisions |
+| **Generation** | 2 | Generate PTBuilder JS scripts and IOS CLI config blocks |
+| **Full Pipeline** | 1 | Single-call plan + validate + generate + explain + estimate |
+| **Deploy** | 3 | Copy script to clipboard, live-deploy to PT via bridge, check bridge status |
+| **Topology Interaction** | 6 | Query, delete, rename, move devices; delete links; send raw JS |
+| **Export & Projects** | 3 | Export files to disk, list and load saved projects |
+| **Modules** | 3 | List, add, and batch-install expansion modules (HWIC, NIM, NM) |
+| **ACL** | 2 | Apply and remove Access Control Lists on live routers |
+| **NAT / PAT** | 2 | Apply and remove Static NAT, Dynamic NAT, or PAT on live routers |
+
+## All 33 Tools
+
+| Tool | Description |
+|------|-------------|
+| `pt_list_devices` | Lists all 74 supported device models with their ports and categories |
+| `pt_list_templates` | Lists all available topology templates with descriptions and defaults |
+| `pt_get_device_details` | Returns full port and interface details for a specific device model |
+| `pt_estimate_plan` | Dry-run estimation — counts devices, links, and configs without generating the full plan |
+| `pt_plan_topology` | Generates a complete `TopologyPlan` — devices, links, IPs, DHCP, routes, and modules |
+| `pt_validate_plan` | Validates a `TopologyPlan` against 24 typed error codes, returning errors and warnings |
+| `pt_fix_plan` | Auto-corrects common plan errors: wrong cables, missing ports, and router model upgrades |
+| `pt_explain_plan` | Returns a natural-language explanation of every decision in the plan |
+| `pt_generate_script` | Generates the PTBuilder JavaScript script (`addDevice`, `addModule`, `addLink`) |
+| `pt_generate_configs` | Generates per-device IOS CLI configuration blocks for routers, switches, and hosts |
+| `pt_full_build` | All-in-one pipeline: plan → validate → generate → explain → estimate in a single call |
+| `pt_deploy` | Copies the topology script to the Windows clipboard with step-by-step paste instructions |
+| `pt_live_deploy` | Sends commands directly to a running Packet Tracer instance via the HTTP bridge |
+| `pt_bridge_status` | Checks whether the HTTP bridge is active and PTBuilder is connected |
+| `pt_query_topology` | Reads the currently loaded devices from the active Packet Tracer topology |
+| `pt_delete_device` | Removes a device and all its links from the active topology in Packet Tracer |
+| `pt_rename_device` | Renames a device in the active Packet Tracer topology |
+| `pt_move_device` | Moves a device to new canvas coordinates in the Packet Tracer logical view |
+| `pt_delete_link` | Removes the link connected to a specific interface on a device |
+| `pt_set_port` | Configures low-level port attributes (bandwidth, duplex, description, MAC) on a live device |
+| `pt_send_raw` | Sends arbitrary JavaScript to the Packet Tracer Script Engine via the bridge |
+| `pt_export` | Exports the plan, PTBuilder JS script, and IOS CLI configs to files on disk |
+| `pt_list_projects` | Lists all previously saved topology projects |
+| `pt_load_project` | Loads a previously saved project by name |
+| `pt_list_modules` | Lists expansion modules from the catalog, optionally filtered by router model or category |
+| `pt_add_module` | Installs a single expansion module in a slot on an existing device in Packet Tracer |
+| `pt_install_modules_batch` | Installs multiple modules across one or more devices in a single power-cycle operation |
+| `pt_apply_acl` | Applies a standard, extended, or named ACL to a router interface via IOS CLI |
+| `pt_apply_acl_object` | Applies an ACL using the PT AclProcess object API instead of CLI |
+| `pt_remove_acl` | Removes an ACL and its interface binding from a router via IOS CLI |
+| `pt_remove_acl_object` | Removes an ACL using the PT AclProcess object API |
+| `pt_apply_nat` | Applies Static NAT, Dynamic NAT, or PAT (overload) to a router |
+| `pt_remove_nat` | Removes NAT translation rules, pool, and ACL from a router |
+
+## Workflow
+
+The tools are designed to work together as a pipeline. A natural-language request flows through planning, validation, generation, and finally deployment into a live Packet Tracer instance.
+
+```
+Natural language prompt
+  ↓ pt_plan_topology / pt_full_build
+TopologyPlan (JSON)
+  ↓ pt_validate_plan → pt_fix_plan
+Validated Plan
+  ↓ pt_generate_script / pt_generate_configs
+PTBuilder JS + IOS CLI
+  ↓ pt_live_deploy
+Running Packet Tracer Topology
+```
+
+<Note>
+**`pt_full_build` vs. the step-by-step pipeline**
+
+`pt_full_build` runs the entire pipeline in a single call and returns a human-readable report — ideal when you want a quick, complete build without intermediate steps. Use the individual tools (`pt_plan_topology` → `pt_validate_plan` → `pt_fix_plan` → `pt_generate_script`) when you need to inspect or modify the plan at each stage, or when you need machine-readable JSON to pass to downstream tools like `pt_live_deploy` or `pt_generate_configs`. The output of `pt_full_build` is a formatted report, **not** direct JSON input for other tools.
+</Note>
+
+## Tool Group Pages
+
+<CardGroup cols={2}>
+  <Card title="pt_plan_topology" icon="map" href="/tools/pt-plan-topology">
+    Generate a complete TopologyPlan from a natural-language description
+  </Card>
+  <Card title="pt_validate_plan" icon="circle-check" href="/tools/pt-validate-plan">
+    Validate a TopologyPlan against 24 typed error codes
+  </Card>
+  <Card title="pt_fix_plan" icon="wrench" href="/tools/pt-fix-plan">
+    Auto-fix cables, ports, and router model mismatches
+  </Card>
+  <Card title="pt_explain_plan" icon="comment" href="/tools/pt-explain-plan">
+    Get a human-readable summary of every plan decision
+  </Card>
+  <Card title="pt_estimate_plan" icon="calculator" href="/tools/pt-estimate-plan">
+    Dry-run device, link, and config count estimation
+  </Card>
+  <Card title="pt_full_build" icon="rocket" href="/tools/pt-full-build">
+    All-in-one plan → validate → generate → deploy pipeline
+  </Card>
+</CardGroup>

@@ -1,0 +1,57 @@
+---
+title: "pt_delete_device: Remove a Device from the Canvas"
+sidebarTitle: "pt_delete_device"
+description: "pt_delete_device removes a named device and all its connected links from the active Cisco Packet Tracer topology via the HTTP bridge."
+---
+
+`pt_delete_device` sends a `deleteDevice(name)` call to the Packet Tracer Script Engine via the HTTP bridge, removing the specified device from the logical canvas. Packet Tracer automatically disconnects and removes all cables attached to the device as part of the deletion, so you do not need to call `pt_delete_link` on each interface first. The device is removed immediately on the next PTBuilder poll cycle (within 500 ms of the call).
+
+## Parameters
+
+<ParamField body="device_name" type="string" required>
+  The exact name of the device to remove, as it appears in Packet Tracer. Names are case-sensitive. Use `pt_query_topology` to list current device names if you are unsure of the exact value. Examples: `"R1"`, `"PC3"`, `"Laptop-WAN"`.
+</ParamField>
+
+## Return value
+
+<ResponseField name="result" type="string">
+  A confirmation string on success: `"Dispositivo '{device_name}' eliminado correctamente."`.
+
+  On failure: `"Error al eliminar '{device_name}': {reason}"` where reason is the error message returned by PT's Script Engine.
+
+  If PT does not respond within 8 seconds: `"Sin respuesta de PT. El dispositivo '{device_name}' puede no existir."`.
+</ResponseField>
+
+<Warning>
+  This operation is destructive and irreversible via MCP. Packet Tracer does not expose an undo API to the Script Engine — there is no `pt_restore_device` tool. Verify the device name with `pt_query_topology` before calling this tool, and save your `.pkt` file in Packet Tracer beforehand if you may want to recover.
+</Warning>
+
+## What gets removed
+
+When a device is deleted, Packet Tracer automatically removes:
+
+- The device icon from the logical canvas
+- All cables connected to any of the device's interfaces
+- The device from Packet Tracer's internal network model (`ipc.network()`)
+
+Routing tables, DHCP leases, and ACL configurations on **other** devices that referenced this device are not automatically cleaned up. If the deleted device was a next-hop for static routes on neighboring routers, those routes will become invalid.
+
+## Bridge requirement
+
+`pt_delete_device` requires the HTTP bridge to be active and PTBuilder to be polling. The tool uses a bidirectional round-trip — it sends `deleteDevice(name)` and waits up to 8 seconds for PT to confirm the deletion via `reportResult(...)`.
+
+If the bridge is not connected, the tool returns the bridge error message with the bootstrap snippet. Call `pt_bridge_status` to verify the connection before using this tool.
+
+## Example
+
+To remove a router named `R3` and all its connected links from the active topology:
+
+```
+pt_delete_device("R3")
+```
+
+After the call succeeds, verify with `pt_query_topology` that `R3` no longer appears in the device list.
+
+<Note>
+  If you need to remove multiple devices, call `pt_delete_device` once per device. There is no batch delete tool, but each call is fast (sub-second execution time in PT).
+</Note>
